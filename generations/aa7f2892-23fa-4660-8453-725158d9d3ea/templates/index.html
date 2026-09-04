@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Todo App</title>
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --border-color: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .todo-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            width: 100%;
+            max-width: 480px;
+            padding: 30px;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 24px;
+            color: var(--text-color);
+        }
+
+        .todo-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .todo-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .todo-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .btn-add {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn-add:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .todo-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .todo-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            background-color: #f9fafb;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            word-break: break-word;
+        }
+
+        .todo-text {
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+
+        .btn-delete {
+            background-color: var(--danger-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
+
+        .btn-delete:hover {
+            background-color: var(--danger-hover);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #9ca3af;
+            padding: 20px 0;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="todo-card">
+        <h1>My Todo List</h1>
+        
+        <form class="todo-form" id="todoForm">
+            <input 
+                type="text" 
+                id="todoInput" 
+                class="todo-input" 
+                placeholder="What needs to be done?" 
+                autocomplete="off"
+                required
+            />
+            <button type="submit" class="btn-add">Add</button>
+        </form>
+
+        <ul class="todo-list" id="todoList"></ul>
+        <div class="empty-state" id="emptyState" style="display: none;">
+            No tasks yet. Add one above!
+        </div>
+    </div>
+
+    <script>
+        const todoForm = document.getElementById('todoForm');
+        const todoInput = document.getElementById('todoInput');
+        const todoList = document.getElementById('todoList');
+        const emptyState = document.getElementById('emptyState');
+
+        // Fetch and display all todos
+        async function fetchTodos() {
+            try {
+                const response = await fetch('/todos');
+                if (!response.ok) throw new Error('Failed to fetch todos');
+                const todos = await response.json();
+                renderTodos(todos);
+            } catch (error) {
+                console.error('Error fetching todos:', error);
+            }
+        }
+
+        // Render todo items into the DOM
+        function renderTodos(todos) {
+            todoList.innerHTML = '';
+            
+            if (todos.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+            
+            emptyState.style.display = 'none';
+
+            todos.forEach(todo => {
+                const li = document.createElement('li');
+                li.className = 'todo-item';
+                
+                const span = document.createElement('span');
+                span.className = 'todo-text';
+                span.textContent = todo.task;
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-delete';
+                deleteBtn.textContent = 'Delete';
+                deleteBtn.onclick = () => deleteTodo(todo.id);
+
+                li.appendChild(span);
+                li.appendChild(deleteBtn);
+                todoList.appendChild(li);
+            });
+        }
+
+        // Add a new todo item via POST /todos
+        todoForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const taskText = todoInput.value.trim();
+            if (!taskText) return;
+
+            try {
+                const response = await fetch('/todos', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ task: taskText })
+                });
+
+                if (response.ok) {
+                    todoInput.value = '';
+                    await fetchTodos();
+                } else {
+                    const errorData = await response.json();
+                    alert(errorData.error || 'Failed to add task.');
+                }
+            } catch (error) {
+                console.error('Error adding todo:', error);
+            }
+        });
+
+        // Delete a todo item via DELETE /todos/<id>
+        async function deleteTodo(id) {
+            try {
+                const response = await fetch(`/todos/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await fetchTodos();
+                } else {
+                    const errorData = await response.json();
+                    alert(errorData.error || 'Failed to delete task.');
+                }
+            } catch (error) {
+                console.error('Error deleting todo:', error);
+            }
+        }
+
+        // Initial fetch on page load
+        fetchTodos();
+    </script>
+</body>
+</html>

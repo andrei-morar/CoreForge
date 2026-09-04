@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flask Todo Application</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background-color: #ffffff;
+            width: 100%;
+            max-width: 500px;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .todo-form {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .todo-form input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .todo-form input[type="text"]:focus {
+            border-color: #3498db;
+        }
+        .todo-form button {
+            padding: 12px 20px;
+            font-size: 16px;
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .todo-form button:hover {
+            background-color: #27ae60;
+        }
+        .todo-list { list-style: none; }
+        .todo-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            transition: transform 0.1s;
+        }
+        .todo-item:hover { transform: translateY(-1px); }
+        .todo-title {
+            font-size: 16px;
+            color: #2c3e50;
+            word-break: break-word;
+        }
+        .delete-btn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .delete-btn:hover { background-color: #c0392b; }
+        .empty-state {
+            text-align: center;
+            color: #7f8c8d;
+            font-style: italic;
+            margin-top: 15px;
+        }
+        .error-message {
+            color: #e74c3c;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>My Todo List</h1>
+        <div id="error-message" class="error-message"></div>
+        <form id="todo-form" class="todo-form">
+            <input type="text" id="todo-input" placeholder="What needs to be done?" required>
+            <button type="submit">Add Task</button>
+        </form>
+        <ul id="todo-list" class="todo-list"></ul>
+        <div id="empty-state" class="empty-state" style="display: none;">No todo items found. Add one above!</div>
+    </div>
+    <script>
+        const todoForm = document.getElementById('todo-form');
+        const todoInput = document.getElementById('todo-input');
+        const todoList = document.getElementById('todo-list');
+        const emptyState = document.getElementById('empty-state');
+        const errorMessage = document.getElementById('error-message');
+
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.style.display = 'block';
+            setTimeout(() => { errorMessage.style.display = 'none'; }, 3000);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+                      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+                      .replace(/'/g, "&#039;");
+        }
+
+        function renderTodos(todos) {
+            todoList.innerHTML = '';
+            if (!todos || todos.length === 0) {
+                emptyState.style.display = 'block';
+                return;
+            }
+            emptyState.style.display = 'none';
+            todos.forEach(todo => {
+                const li = document.createElement('li');
+                li.className = 'todo-item';
+                li.innerHTML = `
+                    <span class="todo-title">${escapeHtml(todo.title)}</span>
+                    <button class="delete-btn" onclick="deleteTodo(${todo.id})">Delete</button>
+                `;
+                todoList.appendChild(li);
+            });
+        }
+
+        async function fetchTodos() {
+            try {
+                const response = await fetch('/todos');
+                if (!response.ok) throw new Error('Failed to fetch');
+                renderTodos(await response.json());
+            } catch (err) { showError('Could not load todo items.'); }
+        }
+
+        todoForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const title = todoInput.value.trim();
+            if (!title) return;
+            try {
+                const response = await fetch('/todos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title })
+                });
+                if (response.ok) { todoInput.value = ''; fetchTodos(); }
+                else { const err = await response.json(); showError(err.error || 'Failed to add.'); }
+            } catch (err) { showError('Error connecting to server.'); }
+        });
+
+        async function deleteTodo(id) {
+            try {
+                const response = await fetch(`/todos/${id}`, { method: 'DELETE' });
+                if (response.status === 204) fetchTodos();
+                else showError('Failed to delete.');
+            } catch (err) { showError('Error connecting to server.'); }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchTodos);
+    </script>
+</body>
+</html>

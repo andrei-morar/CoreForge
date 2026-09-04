@@ -1,0 +1,57 @@
+# Environments & Secrets
+.env
+*.env
+!.env.example
+
+# Python Virtual Environment & Caches
+agent_env/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node & Next.js Build Outputs
+ai-dashboard/node_modules/
+ai-dashboard/.next/
+ai-dashboard/out/
+ai-dashboard/dist/
+ai-dashboard/build/
+ai-dashboard/.turbo/
+node_modules/
+
+# Desktop / Electron Packaging Outputs
+dist/
+build/
+release/
+*.exe
+*.deb
+*.AppImage
+*.rpm
+*.snap
+
+# Dynamic Generated Archives
+generations/*.zip
+
+# SQLite Databases & Logs
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+backend.log
+
+# OS Generated Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo

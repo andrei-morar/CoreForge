@@ -1,0 +1,133 @@
+name: Build Desktop Releases (.exe & .deb)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (ex: v2.0.0)'
+        required: true
+        default: 'v2.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Executables (.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: ai-dashboard/package-lock.json
+
+      - name: Build Next.js Dashboard
+        working-directory: ai-dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Desktop Packaging Dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Compile Windows .exe (NSIS Installer & Portable)
+        working-directory: desktop
+        run: npm run pack:win
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: |
+            release/*.exe
+          retention-days: 5
+
+  build-linux:
+    name: Build Ubuntu Packages (.deb & .AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: ai-dashboard/package-lock.json
+
+      - name: Install System Packaging Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot dpkg
+
+      - name: Build Next.js Dashboard
+        working-directory: ai-dashboard
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install Desktop Packaging Dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Compile Linux .deb and .AppImage
+        working-directory: desktop
+        run: npm run pack:linux
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: |
+            release/*.deb
+            release/*.AppImage
+          retention-days: 5
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: release-assets/windows
+
+      - name: Download Linux Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: release-assets/linux
+
+      - name: Display Downloaded Files
+        run: |
+          ls -R release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || inputs.tag_name }}
+          name: "Nexus AI Studio Release ${{ github.ref_name || inputs.tag_name }}"
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            release-assets/windows/*.exe
+            release-assets/linux/*.deb
+            release-assets/linux/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
