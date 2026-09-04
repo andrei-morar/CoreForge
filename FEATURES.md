@@ -1,5 +1,5 @@
-# 📖 Catalog Complet de Funcționalități — Nexus AI Studio 2026
-> **Documentație tehnică și ghid exhaustiv pentru toate funcționalitățile implementate în platforma Nexus AI Studio.**
+# 📖 Catalog Complet de Funcționalități — CoreForge 2026
+> **Documentație tehnică și ghid exhaustiv pentru toate funcționalitățile implementate în platforma CoreForge.**
 
 ---
 

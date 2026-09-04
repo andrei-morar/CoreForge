@@ -1,5 +1,5 @@
 """
-Nexus AI Studio 2026 — Backend API
+CoreForge 2026 — Backend API
 ===================================
 FastAPI server providing:
   - GET  /api/telemetry       → Live CPU & RAM metrics via psutil
@@ -51,7 +51,7 @@ except ImportError:
 # ─── App Configuration ───────────────────────────────────────────────────────
 
 app = FastAPI(
-    title="Nexus AI Studio 2026",
+    title="CoreForge 2026",
     description="Hierarchical AI Agent Orchestration Platform",
     version="2.0.0",
 )
@@ -1165,7 +1165,7 @@ def get_system_specs():
 CURRENT_APP_VERSION = "2.0.0"
 
 @app.get("/api/system/check-updates")
-def check_for_updates(repo: str = "andrei-morar/AiAgents"):
+def check_for_updates(repo: str = "andrei-morar/CoreForge"):
     """Check GitHub Releases for newer .exe and .deb desktop versions."""
     import urllib.request
     import json
@@ -1174,15 +1174,15 @@ def check_for_updates(repo: str = "andrei-morar/AiAgents"):
         "current_version": CURRENT_APP_VERSION,
         "latest_version": CURRENT_APP_VERSION,
         "update_available": False,
-        "release_name": f"Nexus AI Studio v{CURRENT_APP_VERSION}",
-        "release_notes": "Rulezi versiunea oficială curentă Nexus AI Studio 2026.",
+        "release_name": f"CoreForge v{CURRENT_APP_VERSION}",
+        "release_notes": "Rulezi versiunea oficială curentă CoreForge 2026.",
         "published_at": None,
         "repo_url": f"https://github.com/{repo}",
         "releases_url": f"https://github.com/{repo}/releases",
         "assets": {
-            "windows_exe": f"https://github.com/{repo}/releases/latest/download/NexusAIStudio-Setup.exe",
-            "linux_deb": f"https://github.com/{repo}/releases/latest/download/nexus-ai-studio_amd64.deb",
-            "linux_appimage": f"https://github.com/{repo}/releases/latest/download/nexus-ai-studio.AppImage"
+            "windows_exe": f"https://github.com/{repo}/releases/latest/download/CoreForge-Setup.exe",
+            "linux_deb": f"https://github.com/{repo}/releases/latest/download/coreforge_amd64.deb",
+            "linux_appimage": f"https://github.com/{repo}/releases/latest/download/coreforge.AppImage"
         },
         "status": "up_to_date",
         "message": f"Aplicația rulează pe versiunea v{CURRENT_APP_VERSION}."

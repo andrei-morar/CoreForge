@@ -1,7 +1,7 @@
 {
-  "name": "nexus-ai-studio-desktop",
+  "name": "coreforge-desktop",
   "version": "2.0.0",
-  "description": "Nexus AI Studio 2026 - Desktop Application (100% Local AI Multi-Agent IDE)",
+  "description": "CoreForge 2026 - Desktop Application (100% Local AI Multi-Agent IDE)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -18,7 +18,7 @@
     "ide",
     "developer-tools"
   ],
-  "author": "Nexus AI Studio Team",
+  "author": "CoreForge Team",
   "license": "MIT",
   "devDependencies": {
     "electron": "^34.2.0",
@@ -26,8 +26,8 @@
   },
   "build": {
     "appId": "com.nexus.aistudio",
-    "productName": "Nexus AI Studio",
-    "copyright": "Copyright © 2026 Nexus AI Studio",
+    "productName": "CoreForge",
+    "copyright": "Copyright © 2026 CoreForge",
     "directories": {
       "output": "../release"
     },
@@ -54,7 +54,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Nexus AI Studio"
+      "shortcutName": "CoreForge"
     },
     "linux": {
       "target": [
@@ -69,9 +69,9 @@
       ],
       "category": "Development",
       "icon": "assets/icon.png",
-      "maintainer": "Nexus AI Studio <andrei@nexus.local>",
+      "maintainer": "CoreForge <andrei@nexus.local>",
       "synopsis": "Autonomous Multi-Agent AI IDE & Local LLM Orchestrator",
-      "description": "Nexus AI Studio is a 100% local, zero-cloud multi-agent orchestrator and IDE."
+      "description": "CoreForge is a 100% local, zero-cloud multi-agent orchestrator and IDE."
     }
   }
 }

@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
-# Nexus AI Studio 2026 - Push to GitHub Script
+# CoreForge 2026 - Push to GitHub Script
 # ============================================================
 
 set -e
 
 echo "============================================================"
-echo "⚡ Nexus AI Studio 2026 - Configurare & Push pe GitHub"
+echo "⚡ CoreForge 2026 - Configurare & Push pe GitHub"
 echo "============================================================"
 
 REPO_URL="$1"
@@ -39,7 +39,7 @@ git push origin v2.0.0
 echo "============================================================"
 echo "✅ SUCCES! Proiectul tău a fost încărcat pe GitHub!"
 echo "Pipeline-ul de GitHub Actions construiește acum automat:"
-echo " - Nexus AI Studio Setup (.exe) pentru Windows"
-echo " - Nexus AI Studio (.deb) pentru Ubuntu"
+echo " - CoreForge Setup (.exe) pentru Windows"
+echo " - CoreForge (.deb) pentru Ubuntu"
 echo "Le poți descărca din secțiunea 'Releases' a depozitului tău!"
 echo "============================================================"

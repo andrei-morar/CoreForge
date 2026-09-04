@@ -1,6 +1,6 @@
 ---
 name: Cerere de Funcționalitate 🚀
-about: Sugerează o idee sau îmbunătățire pentru Nexus AI Studio
+about: Sugerează o idee sau îmbunătățire pentru CoreForge
 title: '[FEAT] '
 labels: enhancement
 assignees: ''

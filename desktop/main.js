@@ -40,7 +40,7 @@ async function createWindow() {
     height: 900,
     minWidth: 1100,
     minHeight: 720,
-    title: 'Nexus AI Studio 2026',
+    title: 'CoreForge 2026',
     backgroundColor: '#090d16',
     show: false,
     webPreferences: {
@@ -68,7 +68,7 @@ async function createWindow() {
     <html>
       <head>
         <meta charset="utf-8">
-        <title>Lansare Nexus AI Studio...</title>
+        <title>Lansare CoreForge...</title>
         <style>
           body {
             margin: 0;
@@ -98,7 +98,7 @@ async function createWindow() {
       </head>
       <body>
         <div class="spinner"></div>
-        <h2>Pornire Nexus AI Studio 2026</h2>
+        <h2>Pornire CoreForge 2026</h2>
         <p>Se conectează la nucleul local de agenți...</p>
       </body>
     </html>

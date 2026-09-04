@@ -1,6 +1,6 @@
 <div align="center">
 
-  # ⚡ Nexus AI Studio 2026
+  # ⚡ CoreForge 2026
   **Platformă Autonomă de Orchestrare Multi-Agent & Mediu Integrat de Dezvoltare (IDE) — 100% Local & Decuplat de Cloud**
 
   [![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square&logo=githubactions&logoColor=white)](https://github.com)
@@ -16,11 +16,11 @@
 
 ---
 
-## 🌟 Ce este Nexus AI Studio 2026?
+## 🌟 Ce este CoreForge 2026?
 
-**Nexus AI Studio** este o platformă completă de dezvoltare software bazată pe inteligență artificială, concepută pentru a funcționa **complet pe laptopul tău (100% Local)**, fără taxe de utilizare, fără abonamente cloud și fără dependență de Gemini sau OpenAI API.
+**CoreForge** este o platformă completă de dezvoltare software bazată pe inteligență artificială, concepută pentru a funcționa **complet pe laptopul tău (100% Local)**, fără taxe de utilizare, fără abonamente cloud și fără dependență de Gemini sau OpenAI API.
 
-Folosind o arhitectură ierarhică **CrewAI** susținută de accelerare **NVIDIA CUDA** prin **Ollama**, Nexus AI Studio transformă o simplă cerință în limbaj natural într-un proiect software complet (frontend, backend, baze de date, scripturi de lansare), pe care îl poți vizualiza în **Monaco Editor (VSCode)** și rula într-un **Docker Sandbox securizat**.
+Folosind o arhitectură ierarhică **CrewAI** susținută de accelerare **NVIDIA CUDA** prin **Ollama**, CoreForge transformă o simplă cerință în limbaj natural într-un proiect software complet (frontend, backend, baze de date, scripturi de lansare), pe care îl poți vizualiza în **Monaco Editor (VSCode)** și rula într-un **Docker Sandbox securizat**.
 
 ---
 
@@ -107,7 +107,7 @@ graph TD
 
 ```bash
 # 1. Clonează depozitul
-git clone https://github.com/andrei-morar/AiAgents.git
+git clone https://github.com/andrei-morar/CoreForge.git
 cd AiAgents
 
 # 2. Configurează mediul virtual Python
@@ -141,7 +141,7 @@ docker compose up --build
 
 ## ⚙️ Configurare Mod 100% Local (Fără Chei Cloud)
 
-Pentru a folosi Nexus AI Studio fără niciun fel de costuri:
+Pentru a folosi CoreForge fără niciun fel de costuri:
 1. Deschide dashboard-ul la `http://localhost:3000`.
 2. Mergi în tabul **Local AI & Hardware**.
 3. În secțiunea *Configurare Team Manager*, comută pe **🏠 100% Local (Fără Costuri)**.

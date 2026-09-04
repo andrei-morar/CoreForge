@@ -1,4 +1,4 @@
-name: Nexus AI Studio CI Pipeline
+name: CoreForge CI Pipeline
 
 on:
   push:

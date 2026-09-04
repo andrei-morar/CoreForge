@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nexus AI Studio 2026 — Hierarchical Agent Orchestration",
+  title: "CoreForge 2026 — Hierarchical Agent Orchestration",
   description:
     "Commercial-grade local AI platform with live hardware telemetry, persistent memory, and hierarchical CrewAI agent swarms powered by Gemini and Llama 3.",
 };

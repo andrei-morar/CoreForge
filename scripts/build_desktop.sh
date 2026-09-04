@@ -2,7 +2,7 @@
 set -e
 
 echo "============================================================"
-echo "⚡ Nexus AI Studio 2026 - Desktop Packaging Script"
+echo "⚡ CoreForge 2026 - Desktop Packaging Script"
 echo "============================================================"
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." >/dev/null 2>&1 && pwd )"
