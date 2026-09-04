@@ -18,7 +18,11 @@ export const metadata: Metadata = {
     "Commercial-grade local AI platform with live hardware telemetry, persistent memory, and hierarchical CrewAI agent swarms powered by Gemini and Llama 3.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
   return (
     <html
       lang="en"
