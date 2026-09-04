@@ -20,12 +20,13 @@
   ],
   "author": "CoreForge Team",
   "license": "MIT",
+  "homepage": "https://github.com/andrei-morar/CoreForge",
   "devDependencies": {
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "com.nexus.aistudio",
+    "appId": "com.andrei.coreforge",
     "productName": "CoreForge",
     "copyright": "Copyright © 2026 CoreForge",
     "directories": {
