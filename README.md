@@ -108,7 +108,7 @@ graph TD
 ```bash
 # 1. Clonează depozitul
 git clone https://github.com/andrei-morar/CoreForge.git
-cd AiAgents
+cd CoreForge
 
 # 2. Configurează mediul virtual Python
 python3 -m venv agent_env
@@ -121,7 +121,7 @@ npm install
 cd ..
 
 # 4. Pornește întregul studio printr-o singură comandă
-./start_nexus.sh
+./start_coreforge.sh
 ```
 
 Aplicația va fi accesibilă la:
