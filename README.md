@@ -153,25 +153,24 @@ Pentru a folosi CoreForge fără niciun fel de costuri:
 ## 📂 Structura Proiectului
 
 ```
-AiAgents/
-├── .github/                      # Ecosistem GitHub profesional
+CoreForge/
+├── .github/                      # Ecosistem GitHub CI/CD & Workflows
 │   ├── workflows/ci.yml         # Pipeline automat de teste și build
+│   ├── workflows/release.yml    # Compilare automată .exe (Windows) și .deb (Ubuntu)
 │   ├── ISSUE_TEMPLATE/          # Șabloane pentru bug report & feature request
 │   └── PULL_REQUEST_TEMPLATE.md # Șablon pentru contribuții
-├── ai-dashboard/                 # Frontend Next.js 16
-│   ├── app/
-│   │   ├── page.tsx             # Dashboard principal cu toate tab-urile
-│   │   └── globals.css          # Stiluri, efecte glassmorphism și animații
-│   ├── Dockerfile               # Build containerizat frontend
-│   └── package.json             # Dependențe React, Monaco, ReactFlow
-├── generations/                  # Aplicațiile de cod generate de agenți
-├── flask_todo_app/               # Proiect demonstrativ generat de swarm
-├── Dockerfile.backend            # Build containerizat backend Python
-├── docker-compose.yml            # Orchestrare multi-container completă
-├── main.py                       # Server FastAPI, orchestrare CrewAI, Docker SDK
-├── start_nexus.sh                # Script automat de pornire cu graceful shutdown
-├── nexus_memory.db               # Bază de date SQLite persistentă
-├── FEATURES.md                   # Documentație detaliată a fiecărei funcționalități
+├── ai-dashboard/                 # Frontend Next.js 16 (Turbopack, Monaco Editor, ReactFlow)
+├── desktop/                      # Wrapper Desktop Electron (NSIS installer .exe, .deb)
+├── docs/                         # Documentație tehnică, arhitectură și planuri de sarcini
+├── examples/                     # Aplicații demonstrative de referință (ex: flask_todo_app)
+├── generations/                  # Aplicațiile de cod generate autonom de către agenți
+├── scripts/                      # Utilitare automate (build_desktop.sh, push_to_github.sh)
+├── tests/                        # Suită completă de 15 teste automate pytest
+├── docker-compose.yml            # Orchestrare multi-container Docker cu suport GPU
+├── Dockerfile.backend            # Build containerizat backend FastAPI
+├── main.py                       # Nucleu FastAPI, orchestrare CrewAI și SQLite
+├── start_coreforge.sh            # Script de pornire rapidă într-un singur pas
+├── FEATURES.md                   # Catalogul complet al funcționalităților
 └── README.md                     # Documentația oficială a proiectului
 ```
 
