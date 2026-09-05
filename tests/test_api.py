@@ -310,6 +310,92 @@ def test_check_updates_endpoint(client):
     assert "windows_exe" in data["assets"]
     assert "linux_deb" in data["assets"]
     assert "linux_appimage" in data["assets"]
-    assert data["current_version"] == "2.0.0"
+    assert data["current_version"] == "2.1.0"
+
+
+def test_moe_routing_setting(client):
+    # Enable MoE routing
+    res = client.post("/api/settings", json={"moe_routing_enabled": True})
+    assert res.status_code == 200
+    assert res.json()["settings"]["moe_routing_enabled"] is True
+
+    # Disable MoE routing
+    res2 = client.post("/api/settings", json={"moe_routing_enabled": False})
+    assert res2.status_code == 200
+    assert res2.json()["settings"]["moe_routing_enabled"] is False
+
+    # Re-enable
+    client.post("/api/settings", json={"moe_routing_enabled": True})
+
+
+def test_editor_autocomplete(client):
+    payload = {
+        "code_prefix": "def calculate_discount(price, rate):\n    # return discounted price\n    ",
+        "code_suffix": "\n\nprint(calculate_discount(100, 0.2))",
+        "file_path": "app.py",
+        "language": "python"
+    }
+    res = client.post("/api/editor/autocomplete", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert "completion" in data
+    assert "model" in data
+
+
+def test_rag_index_and_search(client):
+    proj_name = "test-rag-app"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, proj_name)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "app.py"), "w") as f:
+        f.write("def auth_login_user(username, password):\n    \"\"\"Authenticate user credential token.\"\"\"\n    return {'token': 'jwt-secret-token'}\n\ndef process_payment(amount):\n    return True\n")
+
+    # Index project
+    idx_res = client.post(f"/api/rag/index/{proj_name}")
+    assert idx_res.status_code == 200
+    idx_data = idx_res.json()
+    assert idx_data["status"] == "indexed"
+    assert idx_data["total_chunks"] >= 1
+
+    # Search project
+    search_res = client.get(f"/api/rag/search?project={proj_name}&q=auth_login_user")
+    assert search_res.status_code == 200
+    search_data = search_res.json()
+    assert search_data["count"] >= 1
+    assert any("auth_login_user" in r["snippet"] or r["symbol_name"] == "auth_login_user" for r in search_data["results"])
+
+
+def test_sandbox_preview_status_and_static(client):
+    proj_name = "test-preview-app"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, proj_name)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "index.html"), "w") as f:
+        f.write("<!DOCTYPE html><html><body><h1>CoreForge Preview Test</h1></body></html>")
+
+    # Check preview status
+    status_res = client.get(f"/api/sandbox/preview-status/{proj_name}")
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert status_data["is_supported"] is True
+    assert status_data["preview_type"] == "static"
+    assert "preview_url" in status_data
+
+    # Check static serving
+    serve_res = client.get(f"/api/preview/static/{proj_name}/index.html")
+    assert serve_res.status_code == 200
+    assert b"CoreForge Preview Test" in serve_res.content
+
+
+def test_sandbox_auto_fix(client):
+    proj_name = "test-autofix-app"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, proj_name)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "app.py"), "w") as f:
+        f.write("def healthy_function():\n    return 42\n")
+
+    res = client.post(f"/api/sandbox/auto-fix/{proj_name}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in ("already_passing", "fixed", "partially_fixed")
+
 
 

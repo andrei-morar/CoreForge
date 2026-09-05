@@ -449,11 +449,13 @@ export default function Dashboard() {
     local_manager_model: string;
     has_gemini_key: boolean;
     gemini_api_key_masked?: string;
+    moe_routing_enabled?: boolean;
   }>({
     manager_provider: 'local',
     local_manager_model: 'qwen2.5-coder:latest',
     has_gemini_key: false,
-    gemini_api_key_masked: ''
+    gemini_api_key_masked: '',
+    moe_routing_enabled: true
   });
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [managerTestStatus, setManagerTestStatus] = useState<{
@@ -470,6 +472,118 @@ export default function Dashboard() {
   });
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  // ── 7 Advanced Features State ──
+  const [editorMode, setEditorMode] = useState<'code' | 'preview'>('code');
+  const [previewViewport, setPreviewViewport] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
+  const [previewData, setPreviewData] = useState<any | null>(null);
+  const [previewKey, setPreviewKey] = useState(0);
+  const [copilotEnabled, setCopilotEnabled] = useState(true);
+  const [ragQuery, setRagQuery] = useState('');
+  const [ragResults, setRagResults] = useState<any[]>([]);
+  const [isRagSearching, setIsRagSearching] = useState(false);
+  const [isRagIndexing, setIsRagIndexing] = useState(false);
+  const [ragToast, setRagToast] = useState<string | null>(null);
+  const [isAutoFixing, setIsAutoFixing] = useState(false);
+  const [autoFixResult, setAutoFixResult] = useState<any | null>(null);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
+
+  const notifyUser = useCallback((title: string, body: string) => {
+    if (typeof window !== 'undefined' && (window as any).nexusDesktop?.showNotification) {
+      (window as any).nexusDesktop.showNotification(title, body);
+      return;
+    }
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'granted') {
+        new Notification(title, { body, icon: '/favicon.ico' });
+      } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            new Notification(title, { body, icon: '/favicon.ico' });
+          }
+        });
+      }
+    }
+  }, []);
+
+  const handleAutoFix = async () => {
+    if (!activeProject || isAutoFixing) return;
+    setIsAutoFixing(true);
+    setAutoFixResult(null);
+    try {
+      const res = await fetch(`${API}/api/sandbox/auto-fix/${activeProject}`, { method: 'POST' });
+      const data = await res.json();
+      setAutoFixResult(data);
+      if (data.modified_files && data.modified_files.length > 0) {
+        await reloadProjectFiles(activeProject);
+      }
+      setSandboxLogs(`[Auto-Fix Status]: ${data.status}\n${data.message || ''}\nFișiere modificate: ${(data.modified_files || []).join(', ') || 'niciunul'}\n\nDiagnostic:\n${data.diagnostics || ''}`);
+      setIsTerminalOpen(true);
+      notifyUser('CoreForge Auto-Fix', `Diagnostic finalizat: ${data.status}`);
+    } catch (e: any) {
+      setSandboxLogs(`[Auto-Fix Error]: ${e.message}`);
+      setIsTerminalOpen(true);
+    } finally {
+      setIsAutoFixing(false);
+    }
+  };
+
+  const handleRagSearch = async (query: string) => {
+    setRagQuery(query);
+    if (!query.trim() || !activeProject) {
+      setRagResults([]);
+      return;
+    }
+    setIsRagSearching(true);
+    try {
+      const res = await fetch(`${API}/api/rag/search?project=${encodeURIComponent(activeProject)}&q=${encodeURIComponent(query)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRagResults(data.results || []);
+      }
+    } catch {
+      setRagResults([]);
+    } finally {
+      setIsRagSearching(false);
+    }
+  };
+
+  const handleRagIndex = async () => {
+    if (!activeProject || isRagIndexing) return;
+    setIsRagIndexing(true);
+    setRagToast(null);
+    try {
+      const res = await fetch(`${API}/api/rag/index/${activeProject}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setRagToast(`Indexate ${data.total_chunks} fragmente cod în ${data.files_indexed} fișiere!`);
+        setTimeout(() => setRagToast(null), 4000);
+      }
+    } catch (e: any) {
+      setRagToast(`Eroare indexare: ${e.message}`);
+      setTimeout(() => setRagToast(null), 4000);
+    } finally {
+      setIsRagIndexing(false);
+    }
+  };
+
+  const fetchPreviewStatus = useCallback(async (projectName: string) => {
+    try {
+      const res = await fetch(`${API}/api/sandbox/preview-status/${projectName}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPreviewData(data);
+      }
+    } catch {
+      setPreviewData(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeProject) {
+      fetchPreviewStatus(activeProject);
+    }
+  }, [activeProject, fetchPreviewStatus]);
 
   // ── Telemetry Polling (1s) ──
   useEffect(() => {
@@ -570,7 +684,7 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   }, []);
 
-  const handleUpdateSettings = async (updates: Partial<{ manager_provider: string; local_manager_model: string; gemini_api_key: string }>) => {
+  const handleUpdateSettings = async (updates: Partial<{ manager_provider: string; local_manager_model: string; gemini_api_key: string; moe_routing_enabled: boolean }>) => {
     try {
       const res = await fetch(`${API}/api/settings`, {
         method: 'POST',
@@ -1072,6 +1186,7 @@ export default function Dashboard() {
           if (data.status === 'completed') {
             setAgentResponse(data.result);
             setSending(false);
+            notifyUser('CoreForge Swarm', `Sarcina de generare a fost finalizată cu succes!`);
             if (data.download_url) {
               fetch(`${API}/api/job/${data.job_id}/files`)
                 .then(r => r.json())
@@ -1085,6 +1200,7 @@ export default function Dashboard() {
           } else if (data.status === 'failed') {
             setAgentResponse(`Error: ${data.error}`);
             setSending(false);
+            notifyUser('CoreForge Alert', `Execuția swarm a eșuat: ${data.error || 'Necunoscut'}`);
           }
         }
       } catch { /* ignore */ }
@@ -1172,35 +1288,105 @@ export default function Dashboard() {
     { id: 'database', label: 'Memory Archive', icon: Database },
   ];
 
-  // ── Local Chat Function ──
+  // ── Local Chat Function with SSE Real-Time Streaming ──
   const handleLocalChat = async () => {
     if (!localPrompt.trim() || isLocalChatting || !selectedLocalModel || !activeSessionId) return;
-    const newMessages = [...localMessages, { role: 'user', content: localPrompt } as LocalMessage];
+    const userPrompt = localPrompt;
+    const newMessages = [...localMessages, { role: 'user', content: userPrompt } as LocalMessage];
     setLocalMessages(newMessages);
     setLocalPrompt('');
     setIsLocalChatting(true);
+
+    // Initial placeholder for assistant message
+    const assistantIndex = newMessages.length;
+    setLocalMessages([...newMessages, {
+      role: 'assistant',
+      content: '',
+      model: selectedLocalModel
+    }]);
+
     try {
-      const res = await fetch(`${API}/api/chat/local`, {
+      const response = await fetch(`${API}/api/chat/local/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: activeSessionId, prompt: localPrompt, model: selectedLocalModel })
+        body: JSON.stringify({ session_id: activeSessionId, prompt: userPrompt, model: selectedLocalModel })
       });
-      if (res.ok) {
-        const data = await res.json();
-        setLocalMessages([...newMessages, { 
-          role: 'assistant', 
-          content: data.reply, 
-          model: selectedLocalModel,
-          prompt_tokens: data.tokens?.prompt_tokens,
-          completion_tokens: data.tokens?.completion_tokens,
-          total_tokens: data.tokens?.total_tokens,
-          tok_per_sec: data.tokens?.tok_per_sec,
-          duration_ms: data.tokens?.duration_ms
-        }]);
-        fetchLocalSessions(); // Refresh sidebar titles in case it renamed
+
+      if (!response.ok || !response.body) {
+        throw new Error('Streaming failed');
       }
-    } catch { /* ignore */ }
-    setIsLocalChatting(false);
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let streamedContent = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.chunk) {
+                streamedContent += data.chunk;
+                setLocalMessages(prev => {
+                  const updated = [...prev];
+                  if (updated[assistantIndex]) {
+                    updated[assistantIndex] = {
+                      ...updated[assistantIndex],
+                      content: streamedContent
+                    };
+                  }
+                  return updated;
+                });
+                chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }
+              if (data.done && data.tokens) {
+                setLocalMessages(prev => {
+                  const updated = [...prev];
+                  if (updated[assistantIndex]) {
+                    updated[assistantIndex] = {
+                      ...updated[assistantIndex],
+                      content: streamedContent,
+                      prompt_tokens: data.tokens.prompt_tokens,
+                      completion_tokens: data.tokens.completion_tokens,
+                      total_tokens: data.tokens.total_tokens,
+                      tok_per_sec: data.tokens.tok_per_sec,
+                      duration_ms: data.tokens.duration_ms
+                    };
+                  }
+                  return updated;
+                });
+                chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }
+            } catch {
+              // Ignore SSE json parse hiccups
+            }
+          }
+        }
+      }
+      fetchLocalSessions();
+    } catch (err) {
+      console.error('Chat stream error:', err);
+      setLocalMessages(prev => {
+        const updated = [...prev];
+        if (updated[assistantIndex] && !updated[assistantIndex].content) {
+          updated[assistantIndex] = {
+            ...updated[assistantIndex],
+            content: `[Eroare conexiune la modelul ${selectedLocalModel}. Verificați că Ollama rulează local.]`
+          };
+        }
+        return updated;
+      });
+    } finally {
+      setIsLocalChatting(false);
+    }
   };
 
   // ── System Status ──
@@ -1223,8 +1409,8 @@ export default function Dashboard() {
               <Zap className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="font-bold tracking-wider text-sm text-white">NEXUS AI</h1>
-              <p className="text-[10px] text-cyan-400 font-mono tracking-[0.25em]">STUDIO 2026</p>
+              <h1 className="font-bold tracking-wider text-sm text-white">COREFORGE</h1>
+              <p className="text-[10px] text-cyan-400 font-mono tracking-[0.25em]">LOCAL AI 2026</p>
             </div>
           </div>
           <nav className="space-y-1.5">
@@ -1323,6 +1509,17 @@ export default function Dashboard() {
                   <span>Save (Ctrl+S)</span>
                 </button>
 
+                {/* Auto-Fix & Heal Code */}
+                <button
+                  onClick={handleAutoFix}
+                  disabled={!activeProject || isAutoFixing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-600 hover:text-white transition text-xs font-medium border border-amber-500/30 disabled:opacity-50 cursor-pointer shadow-sm"
+                  title="Auto-Fix & Heal: Repară erorile de sintaxă sau execuție în mod autonom cu LLM"
+                >
+                  {isAutoFixing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
+                  <span>Auto-Fix & Heal</span>
+                </button>
+
                 {/* Run Sandbox */}
                 <button
                   onClick={handleRunSandbox}
@@ -1331,6 +1528,35 @@ export default function Dashboard() {
                 >
                   {isSandboxRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                   <span>Run Sandbox</span>
+                </button>
+
+                {/* Live Preview Mode Toggle */}
+                <button
+                  onClick={() => setEditorMode(editorMode === 'code' ? 'preview' : 'code')}
+                  disabled={!activeProject}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+                    editorMode === 'preview'
+                      ? 'bg-purple-600 text-white border-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)]'
+                      : 'bg-[#05070B] border-slate-700 text-slate-300 hover:bg-slate-800'
+                  }`}
+                  title="Comută între Editorul de Cod și Live Web App Preview"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  <span>{editorMode === 'preview' ? 'Mod Cod' : 'Live Preview'}</span>
+                </button>
+
+                {/* Copilot FIM Toggle */}
+                <button
+                  onClick={() => setCopilotEnabled(!copilotEnabled)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+                    copilotEnabled
+                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                      : 'bg-slate-800/40 text-slate-500 border-slate-700'
+                  }`}
+                  title="Copilot Local FIM: Tab-to-Complete în editor"
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Copilot: {copilotEnabled ? 'ON' : 'OFF'}</span>
                 </button>
 
                 {/* Download Project ZIP */}
@@ -1413,6 +1639,73 @@ export default function Dashboard() {
                       )}
                     </select>
                   </div>
+
+                  {/* RAG Semantic Code Search */}
+                  {activeProject && (
+                    <div className="mt-2 pt-2 border-t border-slate-800/60">
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative flex-1">
+                          <input
+                            type="text"
+                            value={ragQuery}
+                            onChange={e => handleRagSearch(e.target.value)}
+                            placeholder="Caută semantic (RAG)..."
+                            className="w-full bg-[#05070B] border border-slate-800 rounded-lg pl-7 pr-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-purple-500/50"
+                          />
+                          <Sparkles className="h-3.5 w-3.5 text-purple-400 absolute left-2 top-2" />
+                          {isRagSearching && <Loader2 className="h-3 w-3 animate-spin text-purple-400 absolute right-2 top-2" />}
+                        </div>
+                        <button
+                          onClick={handleRagIndex}
+                          disabled={isRagIndexing || !activeProject}
+                          title="Re-indexează fișierele în baza SQLite RAG"
+                          className="p-1.5 rounded-lg bg-purple-600/20 text-purple-300 hover:bg-purple-600 hover:text-white border border-purple-500/30 text-xs transition cursor-pointer disabled:opacity-50 shrink-0"
+                        >
+                          {isRagIndexing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+
+                      {ragToast && (
+                        <div className="text-[10px] text-emerald-400 font-medium px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 mt-1.5">
+                          {ragToast}
+                        </div>
+                      )}
+
+                      {/* RAG Results dropdown */}
+                      {ragResults.length > 0 && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar border-t border-slate-800/60 mt-2 pt-1.5">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold px-1">
+                            <span>Fragmente găsite ({ragResults.length})</span>
+                            <button onClick={() => { setRagQuery(''); setRagResults([]); }} className="hover:text-slate-200">Închide</button>
+                          </div>
+                          {ragResults.map((r, idx) => (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (files[r.file_path] !== undefined) {
+                                  handleSelectFile(r.file_path);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-[#05070B] hover:bg-purple-950/30 border border-slate-800 hover:border-purple-500/40 cursor-pointer transition text-left"
+                            >
+                              <div className="flex items-center justify-between text-[11px] font-mono text-purple-300">
+                                <span className="truncate">{r.file_path}</span>
+                                <span className="text-[9px] text-slate-500">L{r.line_start}-{r.line_end}</span>
+                              </div>
+                              {r.symbol_name && (
+                                <div className="text-[10px] font-semibold text-emerald-400 truncate">
+                                  ƒ {r.symbol_name}
+                                </div>
+                              )}
+                              <pre className="text-[9px] text-slate-400 font-mono line-clamp-2 mt-0.5 whitespace-pre-wrap">
+                                {r.snippet}
+                              </pre>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Recursive File Tree */}
@@ -1511,39 +1804,209 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Monaco Editor */}
-                <div className="flex-1 relative min-h-0">
-                  {activeFile && files[activeFile] !== undefined ? (
-                    <Editor
-                      height="100%"
-                      theme="vs-dark"
-                      language={getLanguage(activeFile)}
-                      value={files[activeFile]}
-                      onChange={(val) => {
-                        if (val !== undefined) {
-                          setFiles(prev => ({ ...prev, [activeFile]: val }));
-                        }
-                      }}
-                      options={{
-                        minimap: { enabled: true },
-                        fontSize: 13,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                        lineHeight: 22,
-                        padding: { top: 12, bottom: 12 },
-                        scrollBeyondLastLine: false,
-                        smoothScrolling: true,
-                        bracketPairColorization: { enabled: true },
-                        formatOnPaste: true,
-                      }}
-                    />
-                  ) : (
-                    <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-600 select-none">
-                      <FileCode className="h-16 w-16 text-slate-800 mb-3" />
-                      <p className="text-sm font-medium text-slate-400">Select a file from the explorer to view and edit</p>
-                      <p className="text-xs text-slate-600 mt-1">Files save directly to disk with Ctrl+S</p>
+                {/* Monaco Editor OR Live Preview */}
+                {editorMode === 'preview' ? (
+                  <div className="flex-1 flex flex-col bg-[#07090E] overflow-hidden">
+                    {/* Preview Top Control Bar */}
+                    <div className="h-11 bg-[#0B0F17] border-b border-slate-800 px-4 flex items-center justify-between gap-4 shrink-0">
+                      {/* Viewport switcher */}
+                      <div className="flex items-center gap-1 bg-[#05070B] p-1 rounded-lg border border-slate-800">
+                        <button
+                          onClick={() => setPreviewViewport('desktop')}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                            previewViewport === 'desktop'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Desktop Viewport (100%)"
+                        >
+                          <Monitor className="h-3.5 w-3.5" />
+                          <span>Desktop</span>
+                        </button>
+                        <button
+                          onClick={() => setPreviewViewport('tablet')}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                            previewViewport === 'tablet'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Tablet Viewport (768px)"
+                        >
+                          <Server className="h-3.5 w-3.5" />
+                          <span>Tablet</span>
+                        </button>
+                        <button
+                          onClick={() => setPreviewViewport('mobile')}
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                            previewViewport === 'mobile'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : 'text-slate-400 hover:text-white'
+                          }`}
+                          title="Mobile Viewport (375px)"
+                        >
+                          <Zap className="h-3.5 w-3.5" />
+                          <span>Mobile</span>
+                        </button>
+                      </div>
+
+                      {/* URL / Framework Address Bar */}
+                      <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#05070B] border border-slate-800 text-xs font-mono text-slate-300 overflow-hidden">
+                        <span className="text-emerald-400 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/25 shrink-0">
+                          {previewData?.framework || 'Web App'}
+                        </span>
+                        <span className="truncate text-slate-400">
+                          {previewData?.preview_url ? `${API}${previewData.preview_url}` : 'Niciun preview activ'}
+                        </span>
+                      </div>
+
+                      {/* Action Controls */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => setPreviewKey(k => k + 1)}
+                          title="Reîncarcă Preview"
+                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+                        {previewData?.preview_url && (
+                          <a
+                            href={`${API}${previewData.preview_url}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Deschide în tab nou"
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
+
+                    {/* Responsive Iframe Container */}
+                    <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#05070B]/90">
+                      <div
+                        className={`h-full transition-all duration-300 rounded-xl overflow-hidden border border-slate-800 shadow-[0_10px_35px_rgba(0,0,0,0.8)] bg-white ${
+                          previewViewport === 'mobile'
+                            ? 'w-[375px] max-h-[720px]'
+                            : previewViewport === 'tablet'
+                            ? 'w-[768px] max-h-[900px]'
+                            : 'w-full'
+                        }`}
+                      >
+                        {previewData?.preview_url ? (
+                          <iframe
+                            key={previewKey}
+                            src={`${API}${previewData.preview_url}`}
+                            className="w-full h-full border-0 bg-white"
+                            title="Live App Preview"
+                            sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-[#0A0E17] text-slate-400 p-6 text-center">
+                            <Monitor className="h-12 w-12 text-slate-600 mb-3" />
+                            <h3 className="text-sm font-semibold text-slate-200">Nu a fost detectat un fișier HTML principal sau server pornit</h3>
+                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                              Generați o aplicație web din Agent Command sau rulați containerul pentru a previzualiza interfața live.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex-1 relative min-h-0">
+                    {activeFile && files[activeFile] !== undefined ? (
+                      <Editor
+                        height="100%"
+                        theme="vs-dark"
+                        language={getLanguage(activeFile)}
+                        value={files[activeFile]}
+                        onMount={(editor, monaco) => {
+                          if ((window as any).__coreforge_copilot_registered) return;
+                          (window as any).__coreforge_copilot_registered = true;
+
+                          const supportedLanguages = ['python', 'javascript', 'typescript', 'html', 'css', 'json', 'shell', 'sql'];
+                          supportedLanguages.forEach(lang => {
+                            monaco.languages.registerInlineCompletionsProvider(lang, {
+                              provideInlineCompletions: async (model: any, position: any) => {
+                                if (!copilotEnabled) return { items: [] };
+
+                                const textBefore = model.getValueInRange({
+                                  startLineNumber: Math.max(1, position.lineNumber - 50),
+                                  startColumn: 1,
+                                  endLineNumber: position.lineNumber,
+                                  endColumn: position.column
+                                });
+                                const textAfter = model.getValueInRange({
+                                  startLineNumber: position.lineNumber,
+                                  startColumn: position.column,
+                                  endLineNumber: Math.min(model.getLineCount(), position.lineNumber + 20),
+                                  endColumn: 1000
+                                });
+
+                                if (!textBefore.trim()) return { items: [] };
+
+                                try {
+                                  const res = await fetch(`${API}/api/editor/autocomplete`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      code_prefix: textBefore,
+                                      code_suffix: textAfter,
+                                      file_path: activeFile || '',
+                                      language: lang
+                                    })
+                                  });
+                                  if (!res.ok) return { items: [] };
+                                  const data = await res.json();
+                                  if (!data.completion || !data.completion.trim()) return { items: [] };
+
+                                  return {
+                                    items: [{
+                                      insertText: data.completion,
+                                      range: new monaco.Range(
+                                        position.lineNumber,
+                                        position.column,
+                                        position.lineNumber,
+                                        position.column
+                                      )
+                                    }]
+                                  };
+                                } catch {
+                                  return { items: [] };
+                                }
+                              },
+                              freeInlineCompletions: () => {}
+                            });
+                          });
+                        }}
+                        onChange={(val) => {
+                          if (val !== undefined) {
+                            setFiles(prev => ({ ...prev, [activeFile]: val }));
+                          }
+                        }}
+                        options={{
+                          minimap: { enabled: true },
+                          fontSize: 13,
+                          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                          lineHeight: 22,
+                          padding: { top: 12, bottom: 12 },
+                          scrollBeyondLastLine: false,
+                          smoothScrolling: true,
+                          bracketPairColorization: { enabled: true },
+                          formatOnPaste: true,
+                          inlineSuggest: { enabled: true }
+                        }}
+                      />
+                    ) : (
+                      <div className="flex-1 h-full flex flex-col items-center justify-center text-slate-600 select-none">
+                        <FileCode className="h-16 w-16 text-slate-800 mb-3" />
+                        <p className="text-sm font-medium text-slate-400">Select a file from the explorer to view and edit</p>
+                        <p className="text-xs text-slate-600 mt-1">Files save directly to disk with Ctrl+S • Press Tab to accept Copilot completions</p>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Sandbox Terminal Drawer */}
                 {(isTerminalOpen || sandboxLogs !== null) && (
@@ -1781,6 +2244,38 @@ export default function Dashboard() {
                       >
                         {managerTestStatus.testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                         <span>{managerTestStatus.testing ? 'Testare în curs...' : 'Testează Răspuns Local'}</span>
+                      </button>
+                    </div>
+
+                    {/* MoE Dynamic Local Routing Toggle Card */}
+                    <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/30 flex items-start justify-between flex-wrap gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 mt-0.5">
+                          <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-purple-300">Rutare Dinamică Multi-Model MoE Locală</span>
+                            <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-mono">
+                              {appSettings.moe_routing_enabled !== false ? 'Activ (Auto-Tier)' : 'Dezactivat'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+                            Alocă modele optime per rol: Arhitectură/Planificare (<b>llama3.1 8B</b>), Codare/Sinteză (<b>qwen2.5-coder 7.6B</b>), QA/Validare (<b>mistral 7.2B</b>).
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleUpdateSettings({ moe_routing_enabled: !(appSettings.moe_routing_enabled !== false) })}
+                        className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer flex items-center gap-2 border ${
+                          appSettings.moe_routing_enabled !== false
+                            ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.3)]'
+                            : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>{appSettings.moe_routing_enabled !== false ? 'MoE Activ (Recomandat)' : 'Activează MoE'}</span>
                       </button>
                     </div>
 
@@ -2525,9 +3020,19 @@ export default function Dashboard() {
                         <div className="text-xs font-semibold mb-1 opacity-70 uppercase tracking-wider">
                           {msg.role === 'user' ? 'You' : (msg.model || selectedLocalModel)}
                         </div>
-                        <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                          {msg.content}
-                        </pre>
+                        {msg.content ? (
+                          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                            {msg.content}
+                            {isLocalChatting && i === localMessages.length - 1 && (
+                              <span className="inline-block w-2 h-4 bg-fuchsia-400 animate-pulse ml-1 align-middle rounded-sm shadow-[0_0_8px_#e879f9]" />
+                            )}
+                          </pre>
+                        ) : isLocalChatting && i === localMessages.length - 1 ? (
+                          <div className="flex items-center gap-2 text-xs text-fuchsia-300 animate-pulse py-1">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-fuchsia-400" />
+                            <span>Conectare la flux SSE & calcul tokeni în timp real...</span>
+                          </div>
+                        ) : null}
 
                         {/* Token metrics badge for assistant messages */}
                         {msg.role === 'assistant' && ((msg.total_tokens || 0) > 0 || (msg.prompt_tokens || 0) > 0) && (
@@ -2552,14 +3057,7 @@ export default function Dashboard() {
                     </div>
                   ))
                 )}
-                {isLocalChatting && (
-                  <div className="flex justify-start">
-                    <div className="bg-[#05070B] border border-slate-800 text-slate-300 rounded-2xl p-4 flex items-center gap-3">
-                      <Loader2 className="h-4 w-4 animate-spin text-fuchsia-400" />
-                      <span className="text-sm">{selectedLocalModel} is typing...</span>
-                    </div>
-                  </div>
-                )}
+                <div ref={chatBottomRef} />
               </div>
 
               {/* Input */}

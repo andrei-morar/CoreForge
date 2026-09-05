@@ -1,8 +1,11 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
 
 let mainWindow = null;
+let tray = null;
+app.isQuitting = false;
+
 const FRONTEND_URL = process.env.NEXUS_FRONTEND_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.NEXUS_BACKEND_URL || 'http://localhost:8000';
 
@@ -34,13 +37,63 @@ function checkServerReady(url, maxRetries = 30, interval = 1000) {
   });
 }
 
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+  const icon = nativeImage.createFromPath(iconPath);
+  tray = new Tray(icon);
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'CoreForge 2026 v2.1.0', enabled: false },
+    { type: 'separator' },
+    {
+      label: 'Deschide Panou Principal',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: 'Reîncarcă Aplicația',
+      click: () => {
+        if (mainWindow) mainWindow.reload();
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Închide CoreForge',
+      click: () => {
+        app.isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('CoreForge 2026 — Local Autonomous AI Swarm');
+  tray.setContextMenu(contextMenu);
+
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      if (mainWindow.isVisible()) {
+        mainWindow.focus();
+      } else {
+        mainWindow.show();
+      }
+    }
+  });
+}
+
 async function createWindow() {
+  const iconPath = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1100,
     minHeight: 720,
     title: 'CoreForge 2026',
+    icon: iconPath,
     backgroundColor: '#090d16',
     show: false,
     webPreferences: {
@@ -62,7 +115,16 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
-  // Load a sleek connecting splash if waiting
+  // Minimize to tray on close
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
+    return false;
+  });
+
+  // Load sleek connecting splash while backend/frontend initialize
   mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
     <!DOCTYPE html>
     <html>
@@ -112,7 +174,6 @@ async function createWindow() {
   if (isReady) {
     mainWindow.loadURL(FRONTEND_URL);
   } else {
-    // If frontend dev server isn't up, load directly or show instructions
     mainWindow.loadURL(FRONTEND_URL);
   }
 
@@ -121,7 +182,54 @@ async function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+// IPC Handlers
+ipcMain.handle('show-notification', (event, { title, body }) => {
+  if (Notification.isSupported()) {
+    const iconPath = path.join(__dirname, 'assets', 'icon.png');
+    new Notification({
+      title: title || 'CoreForge 2026',
+      body: body || '',
+      icon: iconPath
+    }).show();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('minimize-to-tray', () => {
+  if (mainWindow) {
+    mainWindow.hide();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle('check-updates', async () => {
+  return new Promise((resolve) => {
+    http.get(`${BACKEND_URL}/api/system/check-updates`, (res) => {
+      let rawData = '';
+      res.on('data', (chunk) => { rawData += chunk; });
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(rawData));
+        } catch (e) {
+          resolve({ error: e.message });
+        }
+      });
+    }).on('error', (err) => {
+      resolve({ error: err.message });
+    });
+  });
+});
+
+app.whenReady().then(() => {
+  createTray();
+  createWindow();
+});
+
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
@@ -132,5 +240,7 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
+  } else if (mainWindow) {
+    mainWindow.show();
   }
 });
