@@ -72,7 +72,8 @@
       "icon": "assets/icon.png",
       "maintainer": "CoreForge <andrei@nexus.local>",
       "synopsis": "Autonomous Multi-Agent AI IDE & Local LLM Orchestrator",
-      "description": "CoreForge is a 100% local, zero-cloud multi-agent orchestrator and IDE."
+      "description": "CoreForge is a 100% local, zero-cloud multi-agent orchestrator and IDE.",
+      "executableArgs": ["--no-sandbox"]
     }
   }
 }

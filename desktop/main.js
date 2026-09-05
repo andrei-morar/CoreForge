@@ -2,6 +2,10 @@ const { app, BrowserWindow, shell, ipcMain, Tray, Menu, Notification, nativeImag
 const path = require('path');
 const http = require('http');
 
+// Bypass Chromium setuid sandbox helper on Linux / Ubuntu 24.04
+app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('disable-gpu-sandbox');
+
 let mainWindow = null;
 let tray = null;
 app.isQuitting = false;
