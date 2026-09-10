@@ -1873,6 +1873,56 @@ def delete_model(model_name: str):
         raise HTTPException(status_code=503, detail=f"Cannot connect to Ollama: {str(e)}")
 
 
+class GgufImportRequest(BaseModel):
+    model_name: str
+    file_path: str = ""
+
+@app.post("/api/models/import-gguf")
+def import_gguf_model(req: GgufImportRequest):
+    """Import a local .gguf file into Ollama as an active model."""
+    name = req.model_name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Model name is required.")
+    
+    clean_name = re.sub(r'[^a-zA-Z0-9_.:-]', '', name).lower()
+    path = req.file_path.strip()
+    if not path or not os.path.exists(path):
+        raise HTTPException(status_code=404, detail=f"GGUF file not found at: {path}")
+    
+    if not path.lower().endswith(".gguf"):
+        raise HTTPException(status_code=400, detail="File must have a .gguf extension.")
+
+    try:
+        payload = {
+            "name": clean_name,
+            "modelfile": f"FROM {os.path.abspath(path)}"
+        }
+        data = json.dumps(payload).encode("utf-8")
+        ollama_req = urllib.request.Request(
+            f"{OLLAMA_BASE_URL}/api/create",
+            data=data,
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(ollama_req, timeout=300) as resp:
+            return {
+                "status": "success",
+                "model_name": clean_name,
+                "message": f"Model '{clean_name}' a fost importat cu succes în Ollama!"
+            }
+    except Exception as e:
+        if shutil.which("ollama"):
+            try:
+                modelfile_path = os.path.join(tempfile.gettempdir(), f"Modelfile_{clean_name}")
+                with open(modelfile_path, "w") as mf:
+                    mf.write("FROM " + os.path.abspath(path) + "\n")
+                res = subprocess.run(["ollama", "create", clean_name, "-f", modelfile_path], capture_output=True, text=True, timeout=300)
+                if res.returncode == 0:
+                    return {"status": "success", "model_name": clean_name, "message": "Importat prin Ollama CLI"}
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail=f"Ollama import failed: {str(e)}")
+
+
 @app.get("/api/models/library")
 def get_models_library():
     """Return the curated catalog of recommended models with compatibility scores."""

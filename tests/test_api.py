@@ -454,3 +454,19 @@ def test_skills_marketplace_toggle(client):
     data = toggle_res.json()
     assert "is_enabled" in data
     assert data["tool_id"] == "DuckDuckGoSearchTool"
+
+def test_import_gguf_validation(client):
+    # Test empty name
+    res = client.post("/api/models/import-gguf", json={"model_name": "", "file_path": "/tmp/nonexistent.gguf"})
+    assert res.status_code == 400
+
+    # Test nonexistent file
+    res2 = client.post("/api/models/import-gguf", json={"model_name": "test-model", "file_path": "/tmp/nonexistent.gguf"})
+    assert res2.status_code == 404
+
+    # Test invalid extension
+    tmp_txt = "/tmp/test_model.txt"
+    with open(tmp_txt, "w") as f:
+        f.write("not gguf")
+    res3 = client.post("/api/models/import-gguf", json={"model_name": "test-model", "file_path": tmp_txt})
+    assert res3.status_code == 400

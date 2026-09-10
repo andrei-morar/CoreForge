@@ -608,6 +608,37 @@ export default function Dashboard() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [isDeletingModel, setIsDeletingModel] = useState(false);
   const [customModelName, setCustomModelName] = useState('');
+  const [ggufModelName, setGgufModelName] = useState('');
+  const [ggufFilePath, setGgufFilePath] = useState('');
+  const [isImportingGguf, setIsImportingGguf] = useState(false);
+
+  const handleImportGguf = async () => {
+    if (!ggufModelName.trim() || !ggufFilePath.trim() || isImportingGguf) return;
+    setIsImportingGguf(true);
+    try {
+      const res = await fetch(`${API}/api/models/import-gguf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model_name: ggufModelName.trim(),
+          file_path: ggufFilePath.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast('Model GGUF Importat', `Modelul ${data.model_name} este acum gata în Ollama!`, 'success');
+        setGgufModelName('');
+        setGgufFilePath('');
+        await fetchModelsDetail();
+      } else {
+        addToast('Eroare Import', data.detail || 'Nu s-a putut importa fișierul GGUF.', 'error');
+      }
+    } catch (e: any) {
+      addToast('Eroare Conexiune', e.message || 'Eroare la importul GGUF', 'error');
+    } finally {
+      setIsImportingGguf(false);
+    }
+  };
   const [modelsLoading, setModelsLoading] = useState(false);
   const [autoFixResult, setAutoFixResult] = useState<any | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -4692,6 +4723,51 @@ export default function Dashboard() {
                         Eroare la descărcare: {pullStatus.error}
                       </div>
                     )}
+                  </div>
+
+                  {/* GGUF Import Section */}
+                  <div className="glass-panel-elevated rounded-2xl p-5 border border-purple-500/25 bg-gradient-to-b from-purple-950/15 via-slate-900/40 to-slate-950/60 shadow-lg space-y-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                        <HardDrive className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-semibold text-white">Import Direct Fișiere GGUF (HuggingFace / Local)</h3>
+                        <p className="text-xs text-slate-400">Transformă orice fișier .gguf descărcat într-un model Ollama nativ fără linii de comandă</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Nume Model în CoreForge</label>
+                        <input
+                          type="text"
+                          placeholder="ex: deepseek-custom-8b"
+                          value={ggufModelName}
+                          onChange={e => setGgufModelName(e.target.value)}
+                          className="w-full bg-[#05070B] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] text-slate-400 mb-1">Calea către fișierul .gguf</label>
+                        <input
+                          type="text"
+                          placeholder="ex: /home/user/Downloads/model.gguf"
+                          value={ggufFilePath}
+                          onChange={e => setGgufFilePath(e.target.value)}
+                          className="w-full bg-[#05070B] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleImportGguf}
+                      disabled={!ggufModelName.trim() || !ggufFilePath.trim() || isImportingGguf}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold disabled:opacity-40 cursor-pointer transition flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      {isImportingGguf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-300" />}
+                      <span>{isImportingGguf ? 'Se configurează modelul în Ollama...' : 'Creează Model în Ollama (1-Click)'}</span>
+                    </button>
                   </div>
 
                   {/* Catalog of Available Models */}
