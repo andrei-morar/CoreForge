@@ -68,7 +68,6 @@ CLAUDE.md
 start_nexus.sh
 
 # Next.js default boilerplate files
-ai-dashboard/postcss.config.mjs
 ai-dashboard/README.md
 
 # Examples
