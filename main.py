@@ -54,7 +54,7 @@ except ImportError:
 app = FastAPI(
     title="CoreForge 2026",
     description="Hierarchical AI Agent Orchestration Platform",
-    version="2.0.0",
+    version="2.2.0",
 )
 
 # ─── Load Environment Variables ──────────────────────────────────────────────
@@ -1779,14 +1779,230 @@ def test_manager_connection():
 
 @app.get("/api/models")
 def get_models():
-    """Fetch available models from local Ollama instance."""
+    """Fetch installed models from local Ollama with full details."""
+    try:
+        req = urllib.request.Request(f"{OLLAMA_BASE_URL}/api/tags")
+        with urllib.request.urlopen(req, timeout=3) as response:
+            data = json.loads(response.read().decode())
+            models_raw = data.get("models", [])
+            models_out = []
+            for m in models_raw:
+                size_bytes = m.get("size", 0)
+                size_gb = round(size_bytes / (1024 ** 3), 2) if size_bytes else 0
+                models_out.append({
+                    "name": m.get("name", "unknown"),
+                    "size_gb": size_gb,
+                    "size_bytes": size_bytes,
+                    "family": m.get("details", {}).get("family", "unknown"),
+                    "parameter_size": m.get("details", {}).get("parameter_size", ""),
+                    "quantization": m.get("details", {}).get("quantization_level", ""),
+                    "format": m.get("details", {}).get("format", ""),
+                    "modified_at": m.get("modified_at", ""),
+                    "digest": m.get("digest", "")[:12] if m.get("digest") else "",
+                })
+            return {
+                "models": [m["name"] for m in models_out],
+                "models_detail": models_out,
+                "count": len(models_out),
+                "ollama_running": True
+            }
+    except Exception:
+        return {"models": [], "models_detail": [], "count": 0, "ollama_running": False}
+
+
+@app.delete("/api/models/{model_name:path}")
+def delete_model(model_name: str):
+    """Delete an installed model from Ollama."""
+    if not model_name or not model_name.strip():
+        raise HTTPException(status_code=400, detail="Model name cannot be empty.")
+    try:
+        data = json.dumps({"name": model_name}).encode("utf-8")
+        req = urllib.request.Request(
+            f"{OLLAMA_BASE_URL}/api/delete",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="DELETE"
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return {"status": "deleted", "model": model_name}
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise HTTPException(status_code=404, detail=f"Model '{model_name}' not found in Ollama.")
+        raise HTTPException(status_code=e.code, detail=f"Ollama error: {e.reason}")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Cannot connect to Ollama: {str(e)}")
+
+
+@app.get("/api/models/library")
+def get_models_library():
+    """Return the curated catalog of recommended models with compatibility scores."""
+    mem = psutil.virtual_memory()
+    total_ram_gb = round(mem.total / (1024 ** 3), 1)
+    free_ram_gb = round(mem.available / (1024 ** 3), 1)
+
+    gpu_info = {"name": "No GPU", "vram_total_mb": 0, "vram_free_mb": 0, "has_gpu": False}
+    try:
+        out = subprocess.check_output(
+            ['nvidia-smi', '--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'],
+            text=True, timeout=2
+        )
+        parts = [x.strip() for x in out.strip().split(',')]
+        if len(parts) >= 3:
+            gpu_info = {
+                "name": parts[0],
+                "vram_total_mb": int(parts[1]),
+                "vram_free_mb": int(parts[2]),
+                "has_gpu": True
+            }
+    except Exception:
+        pass
+
+    vram_gb = round(gpu_info["vram_total_mb"] / 1024, 1)
+
+    # Get currently installed models
+    installed_models = []
     try:
         req = urllib.request.Request(f"{OLLAMA_BASE_URL}/api/tags")
         with urllib.request.urlopen(req, timeout=2) as response:
-            data = json.loads(response.read().decode())
-            return {"models": [m["name"] for m in data.get("models", [])]}
+            tags = json.loads(response.read().decode())
+            installed_models = [m["name"] for m in tags.get("models", [])]
     except Exception:
-        return {"models": ["llama3", "llama3.1", "qwen2.5-coder", "mistral"]} # fallbacks
+        pass
+
+    catalog = [
+        {
+            "id": "qwen2.5-coder:latest",
+            "name": "Qwen 2.5 Coder 7B",
+            "size_gb": 4.7,
+            "min_vram_gb": 5.5,
+            "category": "coding",
+            "tag": "🏆 Recomandat",
+            "recommended_for": "Manager & Programare Full-Stack",
+            "description": "Cea mai bună alegere pentru a înlocui complet Gemini API. Scrie cod structurat și gestionează echipa de agenți.",
+        },
+        {
+            "id": "llama3.1:latest",
+            "name": "Llama 3.1 8B",
+            "size_gb": 4.9,
+            "min_vram_gb": 6.0,
+            "category": "general",
+            "tag": "🧠 Raționament",
+            "recommended_for": "Team Manager & Chat",
+            "description": "Excelent pentru planificare logică, instrucțiuni pas cu pas și conversație generală.",
+        },
+        {
+            "id": "deepseek-r1:8b",
+            "name": "DeepSeek R1 8B",
+            "size_gb": 4.9,
+            "min_vram_gb": 6.0,
+            "category": "reasoning",
+            "tag": "⚡ Chain-of-Thought",
+            "recommended_for": "Rezolvare Probleme Dificile",
+            "description": "Model specializat pe gândire profundă și algoritmi complecși.",
+        },
+        {
+            "id": "mistral:latest",
+            "name": "Mistral 7B Instruct",
+            "size_gb": 4.4,
+            "min_vram_gb": 5.0,
+            "category": "general",
+            "tag": "🚀 Rapid & Precis",
+            "recommended_for": "Agenți Specialiști",
+            "description": "Foarte rapid și concis, ideal ca agent worker pentru backend sau baze de date.",
+        },
+        {
+            "id": "llama3.2:3b",
+            "name": "Llama 3.2 3B",
+            "size_gb": 2.0,
+            "min_vram_gb": 2.5,
+            "category": "lightweight",
+            "tag": "🪶 Ultra Ușor",
+            "recommended_for": "Sisteme cu Resurse Limitate",
+            "description": "Consum minim de memorie. Viteze mari de generare.",
+        },
+        {
+            "id": "qwen2.5-coder:14b",
+            "name": "Qwen 2.5 Coder 14B",
+            "size_gb": 9.0,
+            "min_vram_gb": 10.0,
+            "category": "coding",
+            "tag": "🔥 Performanță",
+            "recommended_for": "Codare Avansată",
+            "description": "Model de 14B parametri. Rulează hibrid VRAM + RAM.",
+        },
+        {
+            "id": "codellama:7b",
+            "name": "Code Llama 7B",
+            "size_gb": 3.8,
+            "min_vram_gb": 4.5,
+            "category": "coding",
+            "tag": "💻 Code-Native",
+            "recommended_for": "Completare Cod & Debugging",
+            "description": "Model specializat Meta pentru completare și depanare cod.",
+        },
+        {
+            "id": "phi3:latest",
+            "name": "Phi-3 Mini 3.8B",
+            "size_gb": 2.3,
+            "min_vram_gb": 3.0,
+            "category": "lightweight",
+            "tag": "🔬 Microsoft",
+            "recommended_for": "Inferență Eficientă",
+            "description": "Model compact de la Microsoft cu performanțe surprinzător de bune.",
+        },
+        {
+            "id": "gemma2:9b",
+            "name": "Gemma 2 9B",
+            "size_gb": 5.4,
+            "min_vram_gb": 6.5,
+            "category": "general",
+            "tag": "🌐 Google",
+            "recommended_for": "Conversație & Analiză",
+            "description": "Model open-source de la Google, excelent la analiză de text.",
+        },
+        {
+            "id": "starcoder2:7b",
+            "name": "StarCoder2 7B",
+            "size_gb": 4.0,
+            "min_vram_gb": 5.0,
+            "category": "coding",
+            "tag": "⭐ BigCode",
+            "recommended_for": "Generare Cod Multi-Limbaj",
+            "description": "Antrenat pe 600+ limbaje de programare de comunitatea BigCode.",
+        }
+    ]
+
+    for m in catalog:
+        m_base = m["id"].split(":")[0]
+        m["is_installed"] = any(m_base in inst for inst in installed_models)
+
+        if gpu_info["has_gpu"] and vram_gb >= m["min_vram_gb"]:
+            m["compatibility_percent"] = 98
+            m["compatibility_status"] = "Ideal: 100% VRAM (Viteză Maximă)"
+            m["badge_color"] = "emerald"
+        elif gpu_info["has_gpu"] and (vram_gb + free_ram_gb) >= (m["min_vram_gb"] * 1.1):
+            m["compatibility_percent"] = 78
+            m["compatibility_status"] = "Hibrid: VRAM + RAM (Funcțional)"
+            m["badge_color"] = "amber"
+        elif total_ram_gb >= m["size_gb"] * 1.5:
+            m["compatibility_percent"] = 55
+            m["compatibility_status"] = "CPU Only (Viteză Moderată)"
+            m["badge_color"] = "blue"
+        else:
+            m["compatibility_percent"] = 25
+            m["compatibility_status"] = "Resurse Limitate (Risc de Swap)"
+            m["badge_color"] = "rose"
+
+    return {
+        "catalog": catalog,
+        "hardware": {
+            "gpu": gpu_info,
+            "total_ram_gb": total_ram_gb,
+            "free_ram_gb": free_ram_gb
+        }
+    }
+
+
 
 @app.get("/api/tools")
 def get_tools():

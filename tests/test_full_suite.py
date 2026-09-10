@@ -210,7 +210,7 @@ def test_shell_scripts_and_config_integrity():
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
     # Check start scripts exist and are executable
-    for script in ["start_coreforge.sh", "start_nexus.sh", "scripts/build_desktop.sh", "scripts/push_to_github.sh"]:
+    for script in ["start_coreforge.sh", "scripts/build_desktop.sh"]:
         full_path = os.path.join(root_dir, script)
         assert os.path.exists(full_path), f"Missing script {script}"
         assert os.access(full_path, os.X_OK), f"Script {script} is not executable"

@@ -474,7 +474,7 @@ export default function Dashboard() {
   });
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [settingsSubTab, setSettingsSubTab] = useState<'update' | 'general' | 'ai' | 'sandbox'>('update');
+  const [settingsSubTab, setSettingsSubTab] = useState<'update' | 'general' | 'ai' | 'models' | 'sandbox'>('update');
   const [downloadProgress, setDownloadProgress] = useState<{
     status: string;
     percent: number;
@@ -513,6 +513,15 @@ export default function Dashboard() {
   const [isRagIndexing, setIsRagIndexing] = useState(false);
   const [ragToast, setRagToast] = useState<string | null>(null);
   const [isAutoFixing, setIsAutoFixing] = useState(false);
+
+  // ── Models Manager State ──
+  const [installedModelsDetail, setInstalledModelsDetail] = useState<any[]>([]);
+  const [modelsCatalog, setModelsCatalog] = useState<any[]>([]);
+  const [ollamaRunning, setOllamaRunning] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isDeletingModel, setIsDeletingModel] = useState(false);
+  const [customModelName, setCustomModelName] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(false);
   const [autoFixResult, setAutoFixResult] = useState<any | null>(null);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
@@ -658,6 +667,48 @@ export default function Dashboard() {
   }, [selectedLocalModel]);
 
   useEffect(() => { fetchAgentsAndModels(); }, [fetchAgentsAndModels]);
+
+  // ── Fetch Models Detail & Catalog ──
+  const fetchModelsDetail = useCallback(async () => {
+    setModelsLoading(true);
+    try {
+      const [modelsRes, catalogRes] = await Promise.all([
+        fetch(`${API}/api/models`),
+        fetch(`${API}/api/models/library`)
+      ]);
+      if (modelsRes.ok) {
+        const data = await modelsRes.json();
+        setInstalledModelsDetail(data.models_detail || data.models || []);
+        setOllamaRunning(data.ollama_running ?? false);
+      }
+      if (catalogRes.ok) {
+        const data = await catalogRes.json();
+        setModelsCatalog(data.catalog || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch models:', e);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { if (settingsSubTab === 'models') fetchModelsDetail(); }, [settingsSubTab, fetchModelsDetail]);
+
+  const handleDeleteModel = async (modelName: string) => {
+    setIsDeletingModel(true);
+    try {
+      const res = await fetch(`${API}/api/models/${encodeURIComponent(modelName)}`, { method: 'DELETE' });
+      if (res.ok) {
+        setDeleteConfirm(null);
+        await fetchModelsDetail();
+        await fetchAgentsAndModels();
+      }
+    } catch (e) {
+      console.error('Delete model failed:', e);
+    } finally {
+      setIsDeletingModel(false);
+    }
+  };
 
   // ── Local Sessions Fetch ──
   const handleNewSession = async () => {
@@ -3804,6 +3855,17 @@ export default function Dashboard() {
                     Inteligență AI & Modele
                   </button>
                   <button
+                    onClick={() => setSettingsSubTab('models')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'models'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Package className="h-3.5 w-3.5" />
+                    Modele AI
+                  </button>
+                  <button
                     onClick={() => setSettingsSubTab('sandbox')}
                     className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       settingsSubTab === 'sandbox'
@@ -4147,6 +4209,260 @@ export default function Dashboard() {
                       >
                         <div className="w-4 h-4 rounded-full bg-white shadow-md" />
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ════ SUB-TAB: MANAGER MODELE AI ════ */}
+              {settingsSubTab === 'models' && (
+                <div className="space-y-6">
+                  {/* Ollama Status Card */}
+                  <div className="glass-panel-elevated rounded-2xl p-5 border border-slate-800">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                        <Package className="h-4 w-4 text-cyan-400" />
+                        Manager Modele AI Locale
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${
+                          ollamaRunning
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                            : 'bg-red-500/10 text-red-400 border-red-500/30'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${ollamaRunning ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                          {ollamaRunning ? 'Ollama Activ' : 'Ollama Oprit'}
+                        </div>
+                        <button
+                          onClick={fetchModelsDetail}
+                          className="p-2 rounded-lg bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition cursor-pointer"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${modelsLoading ? 'animate-spin' : ''}`} />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-center">
+                        <div className="text-2xl font-bold text-cyan-400 tabular-nums">{installedModelsDetail.length}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">Modele Instalate</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-center">
+                        <div className="text-2xl font-bold text-purple-400 tabular-nums">
+                          {installedModelsDetail.reduce((acc, m) => acc + (m.size_gb || 0), 0).toFixed(1)} GB
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">Spațiu Total Ocupat</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/60 text-center">
+                        <div className="text-2xl font-bold text-amber-400 tabular-nums">
+                          {modelsCatalog.filter(c => !c.is_installed).length}
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">Disponibile pt Download</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Installed Models List */}
+                  <div className="glass-panel-elevated rounded-2xl p-5 border border-slate-800">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                      <HardDrive className="h-4 w-4 text-cyan-400" />
+                      Modele Instalate Local
+                    </h3>
+                    {installedModelsDetail.length === 0 ? (
+                      <div className="text-center py-8 text-slate-500 text-sm">
+                        {ollamaRunning ? 'Niciun model instalat. Descarcă unul din catalogul de mai jos.' : 'Ollama nu rulează. Pornește Ollama pentru a vedea modelele.'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {installedModelsDetail.map((m) => (
+                          <div key={m.name} className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/50 border border-slate-800/60 hover:border-slate-700/80 transition group">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
+                                <BrainCircuit className="h-4 w-4 text-cyan-400" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-white truncate flex items-center gap-2">
+                                  {m.name}
+                                  {appSettings.local_manager_model === m.name && (
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">ACTIV</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+                                  <span>{m.family}</span>
+                                  {m.parameter_size && <><span className="text-slate-700">•</span><span>{m.parameter_size}</span></>}
+                                  {m.quantization && <><span className="text-slate-700">•</span><span>{m.quantization}</span></>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2.5 flex-shrink-0">
+                              <span className="text-xs font-mono text-slate-400 px-2 py-1 rounded bg-slate-800/80">{m.size_gb} GB</span>
+                              {deleteConfirm === m.name ? (
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => handleDeleteModel(m.name)}
+                                    disabled={isDeletingModel}
+                                    className="px-2.5 py-1.5 rounded-lg bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold hover:bg-red-500/30 transition cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                                  >
+                                    {isDeletingModel ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                    Confirmă
+                                  </button>
+                                  <button
+                                    onClick={() => setDeleteConfirm(null)}
+                                    className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition cursor-pointer"
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => setDeleteConfirm(m.name)}
+                                  className="p-2 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer opacity-0 group-hover:opacity-100"
+                                  title="Șterge modelul"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Install Custom Model */}
+                  <div className="glass-panel-elevated rounded-2xl p-5 border border-slate-800">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-3">
+                      <Download className="h-4 w-4 text-cyan-400" />
+                      Instalare Model Custom
+                    </h3>
+                    <p className="text-[11px] text-slate-500 mb-3">
+                      Introdu numele oricărui model din registrul Ollama (ex: <code className="text-cyan-400">llama3.2:1b</code>, <code className="text-cyan-400">codellama:13b</code>, <code className="text-cyan-400">wizardcoder:7b</code>).
+                      Lista completă: <a href="https://ollama.com/library" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">ollama.com/library</a>
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customModelName}
+                        onChange={(e) => setCustomModelName(e.target.value)}
+                        placeholder="ex: gemma2:2b"
+                        className="flex-1 bg-[#05070B] border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50 placeholder:text-slate-600"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && customModelName.trim()) {
+                            handlePullModel(customModelName.trim());
+                            setCustomModelName('');
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (customModelName.trim()) {
+                            handlePullModel(customModelName.trim());
+                            setCustomModelName('');
+                          }
+                        }}
+                        disabled={!customModelName.trim() || pullStatus.status === 'pulling'}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 text-white text-xs font-bold disabled:opacity-40 cursor-pointer hover:opacity-90 transition flex items-center gap-1.5"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Descarcă
+                      </button>
+                    </div>
+
+                    {/* Active Pull Progress */}
+                    {pullStatus.status !== 'idle' && pullStatus.status !== 'completed' && pullStatus.status !== 'failed' && (
+                      <div className="mt-4 p-3.5 rounded-xl bg-slate-900/70 border border-cyan-500/20">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-white font-semibold flex items-center gap-2">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-400" />
+                            Se descarcă: {pullStatus.model}
+                          </span>
+                          <span className="text-xs text-cyan-400 font-mono font-bold">{pullStatus.percent}%</span>
+                        </div>
+                        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-cyan-500 to-indigo-500 rounded-full transition-all duration-300"
+                            style={{ width: `${pullStatus.percent}%` }}
+                          />
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1.5">{pullStatus.status}</div>
+                      </div>
+                    )}
+                    {pullStatus.status === 'completed' && (
+                      <div className="mt-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Model descărcat cu succes! Lista de modele a fost actualizată.
+                      </div>
+                    )}
+                    {pullStatus.status === 'failed' && (
+                      <div className="mt-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-2">
+                        <XCircle className="h-4 w-4" />
+                        Eroare la descărcare: {pullStatus.error}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Catalog of Available Models */}
+                  <div className="glass-panel-elevated rounded-2xl p-5 border border-slate-800">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2 mb-4">
+                      <Sparkles className="h-4 w-4 text-cyan-400" />
+                      Catalog Modele Recomandate
+                    </h3>
+                    <div className="grid gap-3">
+                      {modelsCatalog.map((m) => (
+                        <div key={m.id} className={`p-4 rounded-xl border transition ${
+                          m.is_installed
+                            ? 'bg-emerald-500/5 border-emerald-500/20'
+                            : 'bg-slate-900/50 border-slate-800/60 hover:border-slate-700/80'
+                        }`}>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-sm font-bold text-white">{m.name}</span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">{m.tag}</span>
+                                {m.is_installed && (
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 font-bold">✓ Instalat</span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-500 mb-2">{m.description}</p>
+                              <div className="flex items-center gap-3 text-[11px]">
+                                <span className="text-slate-400">{m.size_gb} GB</span>
+                                <span className="text-slate-700">•</span>
+                                <span className="text-slate-400">{m.recommended_for}</span>
+                                <span className="text-slate-700">•</span>
+                                <span className={`font-bold ${
+                                  m.badge_color === 'emerald' ? 'text-emerald-400' :
+                                  m.badge_color === 'amber' ? 'text-amber-400' :
+                                  m.badge_color === 'blue' ? 'text-blue-400' : 'text-rose-400'
+                                }`}>
+                                  {m.compatibility_percent}% OK
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0">
+                              {m.is_installed ? (
+                                <button
+                                  onClick={() => handleUpdateSettings({ local_manager_model: m.id })}
+                                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                                    appSettings.local_manager_model === m.id
+                                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                                      : 'bg-slate-800/80 text-slate-400 hover:text-white border border-slate-700'
+                                  }`}
+                                >
+                                  {appSettings.local_manager_model === m.id ? '✓ Activ' : 'Setează Activ'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => handlePullModel(m.id)}
+                                  disabled={pullStatus.status === 'pulling'}
+                                  className="px-3 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-indigo-600 text-white text-xs font-bold disabled:opacity-40 cursor-pointer hover:opacity-90 transition flex items-center gap-1.5"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Descarcă
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>

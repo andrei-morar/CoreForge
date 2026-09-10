@@ -34,8 +34,8 @@ release/
 *.rpm
 *.snap
 
-# Dynamic Generated Archives
-generations/*.zip
+# Generated project outputs (local only — not part of product)
+generations/
 
 # SQLite Databases & Logs
 *.db
@@ -43,7 +43,7 @@ generations/*.zip
 *.db-wal
 *.db-shm
 *.log
-backend.log
+*.pid
 
 # OS Generated Files
 .DS_Store
@@ -55,4 +55,21 @@ desktop.ini
 .idea/
 *.swp
 *.swo
-*.pid
+
+# Internal development docs
+docs/implementation_plan.md
+docs/task.md
+
+# Auto-generated AI agent rule files
+AGENTS.md
+CLAUDE.md
+
+# Legacy scripts
+start_nexus.sh
+
+# Next.js default boilerplate files
+ai-dashboard/postcss.config.mjs
+ai-dashboard/README.md
+
+# Examples
+examples/
