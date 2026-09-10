@@ -208,9 +208,10 @@ def record_token_usage(source: str, session_or_job_id: str, model: str, prompt_t
 
 @contextmanager
 def get_db():
-    """Yield a thread-safe SQLite connection."""
+    """Yield a thread-safe SQLite connection with foreign keys enabled."""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
     finally:
@@ -972,19 +973,34 @@ def run_in_sandbox(project_name: str):
                 raise HTTPException(status_code=400, detail="Could not determine how to run this project. No Python or JS files found.")
 
     try:
-        # Run container synchronously and capture output (timeout via wrapper could be added, but keeping it simple for now)
-        container_output = docker_client.containers.run(
+        container = docker_client.containers.run(
             image,
             command,
             volumes={os.path.abspath(project_dir): {'bind': '/app', 'mode': 'rw'}},
             working_dir='/app',
-            remove=True,
-            detach=False,
+            detach=True,
             stdout=True,
             stderr=True,
             network_mode="host",
         )
-        return {"logs": container_output.decode('utf-8', errors='ignore')}
+        # Wait up to 6 seconds for short-lived scripts to finish or servers to initialize
+        start_wait = time.time()
+        while time.time() - start_wait < 6.0:
+            container.reload()
+            if container.status != "running":
+                break
+            time.sleep(0.4)
+
+        logs = container.logs().decode('utf-8', errors='ignore')
+        container.reload()
+        if container.status != "running":
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass
+        else:
+            logs += "\n[CoreForge Sandbox] Serviciul rulează activ în container. Accesați fila Live Preview pentru interacțiune directă."
+        return {"logs": logs}
     except docker.errors.ContainerError as e:
         return {"logs": e.stderr.decode('utf-8', errors='ignore') if e.stderr else str(e)}
     except Exception as e:
@@ -1316,6 +1332,8 @@ def run_pull_worker(model_name: str):
 
 @app.post("/api/models/pull")
 def pull_model(request: PullModelRequest):
+    if not request.model or not request.model.strip():
+        raise HTTPException(status_code=400, detail="Model name cannot be empty.")
     global pull_state
     with pull_lock:
         if pull_state["status"] in ["downloading", "pulling"]:
@@ -1464,7 +1482,7 @@ def get_system_specs():
     }
 
 
-CURRENT_APP_VERSION = "2.1.0"
+CURRENT_APP_VERSION = "2.2.0"
 
 @app.get("/api/system/check-updates")
 def check_for_updates(repo: str = "andrei-morar/CoreForge"):
@@ -1701,6 +1719,7 @@ def create_local_session():
 @app.delete("/api/chat/local/sessions/{session_id}")
 def delete_local_session(session_id: int):
     with get_db() as conn:
+        conn.execute("DELETE FROM local_messages WHERE session_id = ?", (session_id,))
         conn.execute("DELETE FROM local_sessions WHERE id = ?", (session_id,))
         conn.commit()
     return {"status": "deleted"}
@@ -1708,6 +1727,9 @@ def delete_local_session(session_id: int):
 @app.get("/api/chat/local/sessions/{session_id}/messages")
 def get_local_messages(session_id: int):
     with get_db() as conn:
+        session = conn.execute("SELECT id FROM local_sessions WHERE id = ?", (session_id,)).fetchone()
+        if not session:
+            return []
         rows = conn.execute("SELECT * FROM local_messages WHERE session_id = ? ORDER BY id ASC", (session_id,)).fetchall()
     return [dict(r) for r in rows]
 

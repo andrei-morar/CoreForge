@@ -4,7 +4,7 @@
   **Platformă Autonomă de Orchestrare Multi-Agent & Mediu Integrat de Dezvoltare (IDE) — 100% Local & Decuplat de Cloud**
 
   [![CI Pipeline](https://img.shields.io/badge/CI-Passing-brightgreen?style=flat-square&logo=githubactions&logoColor=white)](https://github.com)
-  [![Version](https://img.shields.io/badge/Version-2.0.0-blue?style=flat-square)](https://github.com)
+  [![Version](https://img.shields.io/badge/Version-2.2.0-blue?style=flat-square)](https://github.com)
   [![Zero-Cloud](https://img.shields.io/badge/Mode-100%25%20Local%20(No%20API%20Fees)-emerald?style=flat-square&logo=nvidia)](https://github.com)
   [![Frontend](https://img.shields.io/badge/Next.js-16%20(Turbopack)-black?style=flat-square&logo=next.js)](https://nextjs.org)
   [![Backend](https://img.shields.io/badge/FastAPI-Python%203.12-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
@@ -165,11 +165,14 @@ CoreForge/
 ├── examples/                     # Aplicații demonstrative de referință (ex: flask_todo_app)
 ├── generations/                  # Aplicațiile de cod generate autonom de către agenți
 ├── scripts/                      # Utilitare automate (build_desktop.sh, push_to_github.sh)
-├── tests/                        # Suită completă de 15 teste automate pytest
+├── tests/                        # Suită completă de 29 teste automate pytest
 ├── docker-compose.yml            # Orchestrare multi-container Docker cu suport GPU
 ├── Dockerfile.backend            # Build containerizat backend FastAPI
 ├── main.py                       # Nucleu FastAPI, orchestrare CrewAI și SQLite
-├── start_coreforge.sh            # Script de pornire rapidă într-un singur pas
+├── start_coreforge.sh            # Script de pornire rapidă pe Linux / WSL
+├── start_coreforge.bat           # Script de pornire rapidă pe Windows (1-Click)
+├── requirements.txt              # Dependențe oficiale Python
+├── LICENSE                       # Licență open-source MIT
 ├── FEATURES.md                   # Catalogul complet al funcționalităților
 └── README.md                     # Documentația oficială a proiectului
 ```

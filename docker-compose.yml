@@ -4,7 +4,7 @@ services:
   # 1. Ollama AI Model Engine
   ollama:
     image: ollama/ollama:latest
-    container_name: nexus-ollama
+    container_name: coreforge-ollama
     ports:
       - "11434:11434"
     volumes:
@@ -18,12 +18,12 @@ services:
               capabilities: [gpu]
     restart: unless-stopped
 
-  # 2. Nexus FastAPI Backend
+  # 2. CoreForge FastAPI Backend
   backend:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    container_name: nexus-backend
+    container_name: coreforge-backend
     ports:
       - "8000:8000"
     environment:
@@ -42,7 +42,7 @@ services:
     build:
       context: ./ai-dashboard
       dockerfile: Dockerfile
-    container_name: nexus-frontend
+    container_name: coreforge-frontend
     ports:
       - "3000:3000"
     environment:

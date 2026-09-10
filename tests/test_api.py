@@ -310,7 +310,7 @@ def test_check_updates_endpoint(client):
     assert "windows_exe" in data["assets"]
     assert "linux_deb" in data["assets"]
     assert "linux_appimage" in data["assets"]
-    assert data["current_version"] == "2.1.0"
+    assert data["current_version"] == "2.2.0"
 
 
 def test_moe_routing_setting(client):

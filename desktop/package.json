@@ -1,6 +1,6 @@
 {
   "name": "coreforge-desktop",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "CoreForge 2026 - Desktop Application (100% Local AI Multi-Agent IDE)",
   "main": "main.js",
   "scripts": {
@@ -18,7 +18,7 @@
     "ide",
     "developer-tools"
   ],
-  "author": "CoreForge Team",
+  "author": "Andrei Morar & CoreForge Team",
   "license": "MIT",
   "homepage": "https://github.com/andrei-morar/CoreForge",
   "devDependencies": {
@@ -28,7 +28,7 @@
   "build": {
     "appId": "com.andrei.coreforge",
     "productName": "CoreForge",
-    "copyright": "Copyright © 2026 CoreForge",
+    "copyright": "Copyright \u00a9 2026 Andrei Morar & CoreForge",
     "directories": {
       "output": "../release"
     },
@@ -41,11 +41,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico"
@@ -55,25 +59,32 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "CoreForge"
+      "shortcutName": "CoreForge",
+      "runAfterFinish": true
     },
     "linux": {
       "target": [
         {
           "target": "deb",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "AppImage",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "category": "Development",
       "icon": "assets/icon.png",
-      "maintainer": "CoreForge <andrei@nexus.local>",
+      "maintainer": "Andrei Morar <andrei@coreforge.ai>",
       "synopsis": "Autonomous Multi-Agent AI IDE & Local LLM Orchestrator",
       "description": "CoreForge is a 100% local, zero-cloud multi-agent orchestrator and IDE.",
-      "executableArgs": ["--no-sandbox"]
+      "executableArgs": [
+        "--no-sandbox"
+      ]
     }
   }
 }

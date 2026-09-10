@@ -13,7 +13,7 @@ REPO_URL="$1"
 
 if [ -z "$REPO_URL" ]; then
     echo "Utilizare: ./scripts/push_to_github.sh <URL_REPOSITORY_GITHUB>"
-    echo "Exemplu:  ./scripts/push_to_github.sh https://github.com/andrei-morar/Nexus-AI-Studio.git"
+    echo "Exemplu:  ./scripts/push_to_github.sh https://github.com/andrei-morar/CoreForge.git"
     echo ""
     read -p "Introdu URL-ul repository-ului tău GitHub: " REPO_URL
 fi
@@ -33,8 +33,8 @@ fi
 echo "🚀 2. Împingere ramură 'main' pe GitHub..."
 git push -u origin main
 
-echo "🏷️ 3. Împingere tag 'v2.0.0' pentru a declanșa Release-ul automat (.exe & .deb)..."
-git push origin v2.0.0
+echo "🏷️ 3. Împingere tag 'v2.2.0' pentru a declanșa Release-ul automat (.exe & .deb)..."
+git push origin v2.2.0
 
 echo "============================================================"
 echo "✅ SUCCES! Proiectul tău a fost încărcat pe GitHub!"
