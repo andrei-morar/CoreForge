@@ -25,7 +25,11 @@ cd "$DIR"
 sleep 3
 echo ""
 echo "✅ CoreForge 2026 is running!"
+LAN_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 echo "👉 Open your browser to: http://localhost:3000"
+if [ -n "$LAN_IP" ]; then
+    echo "📱 iPhone / iPad PWA:    http://$LAN_IP:3000 (Scan QR in Settings)"
+fi
 echo "🔌 API Swagger docs:     http://localhost:8000/docs"
 echo "📄 Logs saved to backend.log and ai-dashboard/frontend.log"
 echo ""

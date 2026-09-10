@@ -470,3 +470,18 @@ def test_import_gguf_validation(client):
         f.write("not gguf")
     res3 = client.post("/api/models/import-gguf", json={"model_name": "test-model", "file_path": tmp_txt})
     assert res3.status_code == 400
+
+def test_mobile_connect_endpoint(client):
+    res = client.get("/api/system/mobile-connect")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "online"
+    assert "lan_ip" in data
+    assert data["port"] == 3000
+    assert "url" in data
+    assert "http://" in data["url"]
+    assert "qr_data_url" in data
+    assert data["qr_data_url"].startswith("data:image/png;base64,")
+    assert "instructions" in data
+    assert "ro" in data["instructions"]
+    assert "en" in data["instructions"]

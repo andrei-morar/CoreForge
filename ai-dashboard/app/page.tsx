@@ -8,17 +8,38 @@ import {
   Settings, Edit2, Plus, Save, UserX, Code2, FileCode, Play, MessageCircle,
   Terminal, Folder, FolderPlus, FilePlus, FileText, Wrench, X, Check, Shield, Layers,
   Cloud, ShieldCheck, Key, Sparkles, BarChart3, Coins, TrendingUp, PieChart, AlertTriangle,
-  Package, ExternalLink
+  Package, ExternalLink, Smartphone, QrCode, Share2, MoreHorizontal, Copy
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import ReactFlow, { Background, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { translations, Language } from '../lib/translations';
 
-const API = 'http://localhost:8000';
+const getApiBase = () => {
+  if (typeof window !== 'undefined' && window.location.hostname) {
+    return `http://${window.location.hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+};
+const API = {
+  toString: () => getApiBase(),
+  valueOf: () => getApiBase(),
+};
 const CURRENT_APP_VERSION = '2.3.0';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+
+interface MobileConnectInfo {
+  status: string;
+  lan_ip: string;
+  port: number;
+  url: string;
+  qr_data_url: string;
+  instructions: {
+    ro: string[];
+    en: string[];
+  };
+}
 
 interface Telemetry {
   cpu_percent: number;
@@ -561,7 +582,10 @@ export default function Dashboard() {
   });
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [settingsSubTab, setSettingsSubTab] = useState<'update' | 'general' | 'ai' | 'models' | 'sandbox'>('update');
+  const [settingsSubTab, setSettingsSubTab] = useState<'update' | 'general' | 'mobile' | 'ai' | 'models' | 'sandbox'>('update');
+  const [mobileConnect, setMobileConnect] = useState<MobileConnectInfo | null>(null);
+  const [isCopiedMobileUrl, setIsCopiedMobileUrl] = useState(false);
+  const [showMobileMoreSheet, setShowMobileMoreSheet] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{
     status: string;
     percent: number;
@@ -827,6 +851,33 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => { if (settingsSubTab === 'models') fetchModelsDetail(); }, [settingsSubTab, fetchModelsDetail]);
+
+  const fetchMobileConnect = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/system/mobile-connect`);
+      if (res.ok) {
+        setMobileConnect(await res.json());
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 'settings' || settingsSubTab === 'mobile') {
+      fetchMobileConnect();
+    }
+  }, [tab, settingsSubTab, fetchMobileConnect]);
+
+  const handleCopyMobileUrl = () => {
+    if (!mobileConnect?.url) return;
+    navigator.clipboard.writeText(mobileConnect.url);
+    setIsCopiedMobileUrl(true);
+    addToast(
+      lang === 'ro' ? 'Link Copiat' : 'Link Copied',
+      mobileConnect.url,
+      'info'
+    );
+    setTimeout(() => setIsCopiedMobileUrl(false), 2000);
+  };
 
   const handleDeleteModel = async (modelName: string) => {
     setIsDeletingModel(true);
@@ -1757,7 +1808,7 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-[#07090E] text-slate-100 font-sans overflow-hidden">
       {/* ── Sidebar ── */}
-      <aside className="w-64 border-r border-slate-800/80 bg-[#0B0F17]/70 backdrop-blur-xl flex flex-col">
+      <aside className="hidden md:flex w-64 border-r border-slate-800/80 bg-[#0B0F17]/70 backdrop-blur-xl flex-col shrink-0">
         <div className="p-5">
           <div className="flex items-center justify-between gap-2 mb-8">
             <div className="flex items-center gap-3">
@@ -1839,6 +1890,46 @@ export default function Dashboard() {
 
       {/* ── Main Area ── */}
       <main className="flex-1 flex flex-col overflow-hidden bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(6,182,212,0.06),transparent)]">
+        {/* ── Mobile Top Header Bar (< 768px) ── */}
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0B0F17]/90 backdrop-blur-xl border-b border-slate-800/80 shrink-0 z-30">
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center animate-breathing shrink-0">
+              <Zap className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <span className="font-bold tracking-wider text-xs text-white">COREFORGE</span>
+              <span className="ml-1.5 text-[9px] text-cyan-400 font-mono px-1.5 py-0.5 rounded bg-cyan-950/50 border border-cyan-800/50">v2.3</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Bilingual Switcher */}
+            <div className="flex items-center bg-[#05070B] p-0.5 rounded-lg border border-slate-800">
+              <button
+                onClick={() => switchLanguage('ro')}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition ${
+                  lang === 'ro' ? 'bg-indigo-600 text-white' : 'text-slate-500'
+                }`}
+              >
+                RO
+              </button>
+              <button
+                onClick={() => switchLanguage('en')}
+                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition ${
+                  lang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-500'
+                }`}
+              >
+                EN
+              </button>
+            </div>
+
+            {/* Live Status indicator */}
+            <div className="flex items-center gap-1 text-[10px] text-slate-400 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800">
+              <div className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: statusColors[sysStatus] }} />
+              <span className="capitalize">{sysStatus}</span>
+            </div>
+          </div>
+        </div>
         {tab === 'ide' ? (
           /* ═══ TAB: IDE / VS CODE STUDIO ═══ */
           <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#07090E]">
@@ -2471,7 +2562,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 pb-24 md:pb-8">
 
           {/* ═══ TAB: SYSTEM / LOCAL AI & HARDWARE ═══ */}
           {tab === 'system' && (
@@ -4211,6 +4302,17 @@ export default function Dashboard() {
                     General & Rețea
                   </button>
                   <button
+                    onClick={() => setSettingsSubTab('mobile')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'mobile'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Smartphone className="h-3.5 w-3.5" />
+                    {t.settings_sub_mobile}
+                  </button>
+                  <button
                     onClick={() => setSettingsSubTab('ai')}
                     className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                       settingsSubTab === 'ai'
@@ -4426,6 +4528,151 @@ export default function Dashboard() {
                 </div>
               )}
 
+                            {/* ════ SUB-TAB: CONECTARE IPHONE & IPAD (PWA QR) ════ */}
+              {settingsSubTab === 'mobile' && (
+                <div className="space-y-6 animate-fade-in">
+                  <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold tracking-wider uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            {t.mobile_pwa_badge}
+                          </span>
+                          <span className="text-xs font-mono text-slate-500">Wi-Fi LAN Connect</span>
+                        </div>
+                        <h3 className="text-lg font-bold text-white mt-1.5 flex items-center gap-2">
+                          <Smartphone className="h-5 w-5 text-cyan-400" />
+                          {t.mobile_card_title}
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xl leading-relaxed">
+                          {t.mobile_card_subtitle}
+                        </p>
+                      </div>
+                      <button
+                        onClick={fetchMobileConnect}
+                        className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700 cursor-pointer"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                        Re-scan LAN IP
+                      </button>
+                    </div>
+
+                    {/* QR Code and Quick Connect Row */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                      {/* Left: QR Display */}
+                      <div className="lg:col-span-5 flex flex-col items-center justify-center p-6 bg-slate-900/60 rounded-2xl border border-slate-800/90 text-center">
+                        <div className="text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                          <QrCode className="h-4 w-4 text-cyan-400" />
+                          {t.mobile_qr_label}
+                        </div>
+
+                        {mobileConnect?.qr_data_url ? (
+                          <div className="p-3 bg-white rounded-2xl shadow-xl shadow-cyan-500/10 border-2 border-cyan-400/40 inline-block transition hover:scale-105 duration-300">
+                            <img
+                              src={mobileConnect.qr_data_url}
+                              alt="CoreForge QR Code"
+                              className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-52 h-52 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-500">
+                            <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mb-2" />
+                            <span className="text-xs font-mono">Generare QR Code...</span>
+                          </div>
+                        )}
+
+                        {/* Direct URL & Copy Button */}
+                        <div className="w-full mt-5 space-y-2">
+                          <div className="text-[11px] text-slate-400 font-medium text-left flex items-center justify-between">
+                            <span>{t.mobile_lan_url}:</span>
+                            <span className="text-[10px] font-mono text-cyan-400">LAN IP: {mobileConnect?.lan_ip || 'Detectare...'}</span>
+                          </div>
+                          <div className="flex items-center gap-2 bg-[#05070B] p-2 rounded-xl border border-slate-800">
+                            <input
+                              type="text"
+                              readOnly
+                              value={mobileConnect?.url || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3000` : 'http://192.168.1.77:3000')}
+                              className="flex-1 bg-transparent text-xs font-mono text-cyan-300 focus:outline-none px-2 select-all"
+                            />
+                            <button
+                              onClick={handleCopyMobileUrl}
+                              className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1 transition cursor-pointer shrink-0"
+                            >
+                              {isCopiedMobileUrl ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                              <span>{isCopiedMobileUrl ? t.mobile_copied : t.mobile_copy_url}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Step-by-Step Safari PWA Guide */}
+                      <div className="lg:col-span-7 space-y-4">
+                        <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                          <Share2 className="h-4 w-4 text-indigo-400" />
+                          Ghid de Instalare pe iPhone & iPad (Fără App Store)
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                            <div className="h-7 w-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center shrink-0">
+                              1
+                            </div>
+                            <div className="text-xs text-slate-300 leading-relaxed">
+                              <span className="font-semibold text-white block mb-0.5">Rețea Wi-Fi Comună</span>
+                              {t.mobile_step1}
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                            <div className="h-7 w-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center shrink-0">
+                              2
+                            </div>
+                            <div className="text-xs text-slate-300 leading-relaxed">
+                              <span className="font-semibold text-white block mb-0.5">Scanare Cameră Foto</span>
+                              {t.mobile_step2}
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                              3
+                            </div>
+                            <div className="text-xs text-slate-300 leading-relaxed">
+                              <span className="font-semibold text-white block mb-0.5">Butonul Partajare (Share)</span>
+                              {t.mobile_step3}
+                            </div>
+                          </div>
+
+                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                            <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
+                              4
+                            </div>
+                            <div className="text-xs text-slate-300 leading-relaxed">
+                              <span className="font-semibold text-emerald-300 block mb-0.5">Adaugă la ecranul principal</span>
+                              {t.mobile_step4}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Feature Badges */}
+                        <div className="pt-2 grid grid-cols-3 gap-2 text-center">
+                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                            <div className="text-xs font-semibold text-white">Full Screen</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">Fără bare Safari</div>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                            <div className="text-xs font-semibold text-white">Bottom Tab Bar</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">Navigare tactilă iOS</div>
+                          </div>
+                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                            <div className="text-xs font-semibold text-white">0 Setup / Cablu</div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">Direct prin Wi-Fi</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+              )}
+
               {/* ════ SUB-TAB 2: GENERAL & REȚEA ════ */}
               {settingsSubTab === 'general' && (
                 <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
@@ -4436,6 +4683,28 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Temă Vizuală */}
+                                        {/* Conectare iPhone / iPad shortcut */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setSettingsSubTab('mobile')}
+                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        <span>Afișează QR Code</span>
+                      </button>
+                    </div>
+
                     <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                       <div className="text-xs font-semibold text-slate-200">Temă Grafică Aplicație</div>
                       <div className="grid grid-cols-3 gap-2">
@@ -4482,7 +4751,29 @@ export default function Dashboard() {
                   </div>
 
                   {/* Porturi Rețea */}
-                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                                      {/* Conectare iPhone / iPad shortcut */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setSettingsSubTab('mobile')}
+                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        <span>Afișează QR Code</span>
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                     <div className="text-xs font-semibold text-slate-200">Diagnosticare Porturi & Servicii Active</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
                       <div className="p-3 rounded-lg bg-[#05070B] border border-slate-800 flex items-center justify-between">
@@ -4535,6 +4826,28 @@ export default function Dashboard() {
                     </div>
 
                     {/* Temperatură Generare Cod */}
+                                        {/* Conectare iPhone / iPad shortcut */}
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                          <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setSettingsSubTab('mobile')}
+                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        <span>Afișează QR Code</span>
+                      </button>
+                    </div>
+
                     <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                       <div className="flex justify-between items-center">
                         <label className="text-xs font-semibold text-slate-200">
@@ -4975,6 +5288,109 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+            {/* ── Mobile iOS Bottom Tab Bar (< 768px) ── */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B0F17]/95 backdrop-blur-2xl border-t border-slate-800/80 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-10px_25px_rgba(0,0,0,0.5)]">
+        {/* Tab 1: System */}
+        <button
+          onClick={() => { setTab('system'); setShowMobileMoreSheet(false); }}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            tab === 'system' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <HardDrive className={`h-5 w-5 ${tab === 'system' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
+          <span className="text-[10px] font-medium">{t.nav_system}</span>
+        </button>
+
+        {/* Tab 2: Direct Chat */}
+        <button
+          onClick={() => { setTab('direct'); setShowMobileMoreSheet(false); }}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            tab === 'direct' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <MessageCircle className={`h-5 w-5 ${tab === 'direct' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
+          <span className="text-[10px] font-medium">{t.nav_chat}</span>
+        </button>
+
+        {/* Tab 3: Agents */}
+        <button
+          onClick={() => { setTab('agents'); setShowMobileMoreSheet(false); }}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            tab === 'agents' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Layers className={`h-5 w-5 ${tab === 'agents' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
+          <span className="text-[10px] font-medium">{t.nav_agents}</span>
+        </button>
+
+        {/* Tab 4: Settings */}
+        <button
+          onClick={() => { setTab('settings'); setShowMobileMoreSheet(false); }}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            tab === 'settings' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Sliders className={`h-5 w-5 ${tab === 'settings' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
+          <span className="text-[10px] font-medium">{t.nav_settings}</span>
+        </button>
+
+        {/* Tab 5: More / Meniu */}
+        <button
+          onClick={() => setShowMobileMoreSheet(!showMobileMoreSheet)}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            showMobileMoreSheet || ['chat', 'ide', 'tokens', 'dashboard', 'database'].includes(tab)
+              ? 'text-cyan-400'
+              : 'text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <MoreHorizontal className={`h-5 w-5 ${showMobileMoreSheet ? 'scale-110 stroke-[2.5px]' : 'stroke-[1.75px]'}`} />
+          <span className="text-[10px] font-medium">{lang === 'ro' ? 'Meniu' : 'More'}</span>
+        </button>
+      </nav>
+
+      {/* ── Mobile 'More' Drawer / Sheet ── */}
+      {showMobileMoreSheet && (
+        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#0D121F] border-t border-slate-700/80 rounded-t-3xl p-5 shadow-2xl space-y-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <span className="text-sm font-semibold text-white flex items-center gap-2">
+                <Zap className="h-4 w-4 text-cyan-400" />
+                {lang === 'ro' ? 'Navigare Toate Secțiunile' : 'All Sections Navigation'}
+              </span>
+              <button
+                onClick={() => setShowMobileMoreSheet(false)}
+                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5">
+              {tabs.map((tItem) => {
+                const isSelected = tab === tItem.id;
+                const IconComponent = tItem.icon;
+                return (
+                  <button
+                    key={tItem.id}
+                    onClick={() => {
+                      setTab(tItem.id);
+                      setShowMobileMoreSheet(false);
+                    }}
+                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
+                        : 'bg-slate-900/80 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <IconComponent className="h-5 w-5 mb-1.5" />
+                    <span className="text-[11px] font-medium leading-tight line-clamp-1">{tItem.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
       </main>
 
       {/* ── Squad Templates Modal ── */}
@@ -5041,7 +5457,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Global Floating Toasts Container ── */}
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
+      <div className="fixed bottom-20 md:bottom-6 right-4 md:right-6 left-4 md:left-auto z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-auto md:w-full">
         {toasts.map(t => (
           <div
             key={t.id}

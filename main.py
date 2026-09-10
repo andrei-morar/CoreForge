@@ -1522,6 +1522,65 @@ def get_system_specs():
     }
 
 
+@app.get("/api/system/mobile-connect")
+def get_mobile_connect():
+    """Returns local LAN IP, direct URL to Next.js frontend, and base64 QR code for instant iOS/iPad connection."""
+    import socket, io, base64
+    try:
+        import qrcode
+    except ImportError:
+        qrcode = None
+
+    lan_ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('10.255.255.255', 1))
+        lan_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
+    frontend_port = 3000
+    mobile_url = f"http://{lan_ip}:{frontend_port}"
+
+    qr_data_url = ""
+    if qrcode:
+        try:
+            qr = qrcode.QRCode(version=1, box_size=8, border=2)
+            qr.add_data(mobile_url)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            qr_data_url = f"data:image/png;base64,{b64}"
+        except Exception as e:
+            logger.warning(f"QR code generation failed: {e}")
+
+    return {
+        "status": "online",
+        "lan_ip": lan_ip,
+        "port": frontend_port,
+        "url": mobile_url,
+        "qr_data_url": qr_data_url,
+        "instructions": {
+            "ro": [
+                "Conectează iPhone-ul sau iPad-ul la aceeași rețea Wi-Fi cu acest calculator.",
+                "Deschide Camera foto de pe iPhone/iPad și scanează codul QR de mai sus (sau introdu link-ul în Safari).",
+                "Apasă pe butonul de Partajare (Share - iconița cu pătrat și săgeată sus din Safari).",
+                "Alege opțiunea 'Adaugă la ecranul principal' (Add to Home Screen).",
+                "CoreForge se va deschide ca o aplicație nativă fără bara de adrese Safari, cu bară de navigare tactilă dedicată."
+            ],
+            "en": [
+                "Connect your iPhone or iPad to the same Wi-Fi network as this PC.",
+                "Open your iPhone/iPad Camera and scan the QR code above (or type the link into Safari).",
+                "Tap the Share icon (square with arrow pointing up) at the bottom of Safari.",
+                "Select 'Add to Home Screen'.",
+                "CoreForge will launch full-screen like a native iOS app without Safari navigation bars, equipped with a bottom touch tab bar."
+            ]
+        }
+    }
+
 CURRENT_APP_VERSION = "2.3.0"
 
 @app.get("/api/system/check-updates")
