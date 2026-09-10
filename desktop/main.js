@@ -1,7 +1,8 @@
-const { app, BrowserWindow, shell, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, Tray, Menu, Notification, nativeImage, dialog } = require('electron');
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 const { spawn } = require('child_process');
 
 // Linux-only sandbox adjustments (Ubuntu 24.04 unprivileged user namespace restrictions)
@@ -22,11 +23,82 @@ let tray = null;
 app.isQuitting = false;
 
 const APP_VERSION = '2.2.0';
-let activeFrontendUrl = process.env.NEXUS_FRONTEND_URL || 'http://127.0.0.1:3000';
+let activeFrontendUrl = process.env.NEXUS_FRONTEND_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.NEXUS_BACKEND_URL || 'http://127.0.0.1:8000';
 
 // Track spawned child processes for clean termination on quit
 const spawnedChildren = [];
+
+function isValidCoreForgeDir(dirPath) {
+  if (!dirPath || typeof dirPath !== 'string') return false;
+  try {
+    return fs.existsSync(path.join(dirPath, 'main.py')) &&
+           fs.existsSync(path.join(dirPath, 'ai-dashboard'));
+  } catch (e) {
+    return false;
+  }
+}
+
+function getSavedProjectPath() {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'coreforge_config.json');
+    if (fs.existsSync(configPath)) {
+      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (data && data.projectPath && isValidCoreForgeDir(data.projectPath)) {
+        return data.projectPath;
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+function saveProjectPath(projectPath) {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'coreforge_config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ projectPath }, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function findProjectRoot() {
+  // 1. Saved config
+  const saved = getSavedProjectPath();
+  if (saved) return saved;
+
+  // 2. Explicit environment variable
+  if (process.env.COREFORGE_PATH && isValidCoreForgeDir(process.env.COREFORGE_PATH)) {
+    return process.env.COREFORGE_PATH;
+  }
+
+  // 3. Dev source tree (relative to main.js)
+  const devDir = path.resolve(__dirname, '..');
+  if (isValidCoreForgeDir(devDir)) {
+    return devDir;
+  }
+
+  // 4. Common standard paths on Linux, macOS, and Windows
+  const home = os.homedir();
+  const candidates = [
+    path.join(home, 'CoreForge'),
+    path.join(home, 'AiAgents'),
+    path.join(home, 'Projects', 'CoreForge'),
+    path.join(home, 'Desktop', 'CoreForge'),
+    path.join(home, 'Documents', 'CoreForge'),
+    path.join(home, 'Downloads', 'CoreForge'),
+    'C:\\CoreForge',
+    'C:\\Projects\\CoreForge',
+    'D:\\CoreForge',
+    path.join(home, 'AppData', 'Local', 'CoreForge')
+  ];
+
+  for (const c of candidates) {
+    if (isValidCoreForgeDir(c)) {
+      saveProjectPath(c);
+      return c;
+    }
+  }
+
+  return null;
+}
 
 function findPythonExecutable(rootDir) {
   const isWin = process.platform === 'win32';
@@ -47,13 +119,13 @@ function findPythonExecutable(rootDir) {
       ];
 
   for (const p of candidates) {
-    if (p === 'python' || p === 'python3') return p;
+    if (p === 'python' || p === 'python3') continue;
     if (fs.existsSync(p)) return p;
   }
   return isWin ? 'python' : 'python3';
 }
 
-function checkHttpReady(url, timeoutMs = 1200) {
+function checkHttpReady(url, timeoutMs = 1000) {
   return new Promise((resolve) => {
     let resolved = false;
     const req = http.get(url, (res) => {
@@ -80,21 +152,27 @@ function checkHttpReady(url, timeoutMs = 1200) {
   });
 }
 
-// 1-Click Launch: Auto-start backend and frontend if not running
-async function ensureServicesRunning() {
-  const rootDir = path.resolve(__dirname, '..');
+// 1-Click Launch: Auto-start backend and frontend
+async function ensureServicesRunning(forceStart = false) {
+  const rootDir = findProjectRoot();
+  if (!rootDir) {
+    console.warn('CoreForge project directory not found.');
+    return { success: false, reason: 'project_not_found' };
+  }
+
   const backendMainPy = path.join(rootDir, 'main.py');
   const frontendDir = path.join(rootDir, 'ai-dashboard');
 
   // Check backend
   const backendReady = await checkHttpReady('http://127.0.0.1:8000/api/telemetry', 800);
-  if (!backendReady && fs.existsSync(backendMainPy)) {
+  if (!backendReady && (forceStart || true) && fs.existsSync(backendMainPy)) {
     const pythonExe = findPythonExecutable(rootDir);
     try {
+      const logFd = fs.openSync(path.join(rootDir, 'backend.log'), 'a');
       const backendProc = spawn(pythonExe, [backendMainPy], {
         cwd: rootDir,
         detached: false,
-        stdio: 'ignore',
+        stdio: ['ignore', logFd, logFd],
         windowsHide: true,
         env: { ...process.env, PYTHONUNBUFFERED: '1' }
       });
@@ -105,15 +183,16 @@ async function ensureServicesRunning() {
   }
 
   // Check frontend
-  const frontendReady = await checkHttpReady('http://127.0.0.1:3000', 800);
-  if (!frontendReady && fs.existsSync(path.join(frontendDir, 'package.json'))) {
+  const frontendReady = await checkHttpReady('http://localhost:3000', 800);
+  if (!frontendReady && (forceStart || true) && fs.existsSync(path.join(frontendDir, 'package.json'))) {
     const isWin = process.platform === 'win32';
     const npmCmd = isWin ? 'npm.cmd' : 'npm';
     try {
+      const logFd = fs.openSync(path.join(rootDir, 'frontend.log'), 'a');
       const frontendProc = spawn(npmCmd, ['run', 'dev'], {
         cwd: frontendDir,
         detached: false,
-        stdio: 'ignore',
+        stdio: ['ignore', logFd, logFd],
         windowsHide: true,
         env: { ...process.env }
       });
@@ -122,6 +201,8 @@ async function ensureServicesRunning() {
       console.error('Failed to spawn frontend:', e);
     }
   }
+
+  return { success: true, rootDir };
 }
 
 function cleanupChildProcesses() {
@@ -157,174 +238,6 @@ async function waitForServer(maxAttempts = 30, intervalMs = 600) {
     await new Promise(r => setTimeout(r, intervalMs));
   }
   return false;
-}
-
-function getOfflineHtml() {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`
-    <!DOCTYPE html>
-    <html lang="ro">
-      <head>
-        <meta charset="utf-8">
-        <title>CoreForge 2026 — Hub Offline</title>
-        <style>
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            padding: 40px 20px;
-            background: #07090e;
-            color: #f1f5f9;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            user-select: none;
-          }
-          .card {
-            background: rgba(15, 23, 42, 0.75);
-            border: 1px solid rgba(148, 163, 184, 0.15);
-            border-radius: 16px;
-            padding: 36px 40px;
-            max-width: 640px;
-            width: 100%;
-            text-align: center;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
-          }
-          .logo { font-size: 38px; margin-bottom: 12px; }
-          h1 {
-            margin: 0 0 10px 0;
-            font-size: 24px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #06b6d4, #6366f1);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-          }
-          p.subtitle {
-            margin: 0 0 24px 0;
-            color: #94a3b8;
-            font-size: 14px;
-            line-height: 1.5;
-          }
-          .status-box {
-            background: rgba(2, 6, 23, 0.6);
-            border: 1px solid rgba(148, 163, 184, 0.1);
-            border-radius: 10px;
-            padding: 16px;
-            margin-bottom: 24px;
-            text-align: left;
-            font-size: 13px;
-          }
-          .status-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 0;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.06);
-          }
-          .status-row:last-child { border-bottom: none; }
-          .badge-off {
-            background: rgba(239, 68, 68, 0.15);
-            color: #f87171;
-            padding: 3px 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            font-weight: 600;
-          }
-          .instructions {
-            background: rgba(15, 23, 42, 0.9);
-            border-radius: 8px;
-            padding: 14px;
-            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-            font-size: 12px;
-            color: #38bdf8;
-            text-align: left;
-            margin-bottom: 24px;
-            overflow-x: auto;
-          }
-          .btn-group { display: flex; gap: 12px; justify-content: center; }
-          button {
-            background: linear-gradient(135deg, #06b6d4, #4f46e5);
-            color: #ffffff;
-            border: none;
-            padding: 11px 24px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: opacity 0.2s, transform 0.1s;
-          }
-          button:hover { opacity: 0.9; transform: translateY(-1px); }
-          button:active { transform: translateY(0); }
-          .spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #fff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-          }
-          @keyframes spin { to { transform: rotate(360deg); } }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <div class="logo">⚡</div>
-          <h1>CoreForge 2026 v${APP_VERSION}</h1>
-          <p class="subtitle">Nucleul local de servicii se inițializează sau nu răspunde pe portul 3000.<br>Aplicația se va conecta automat de îndată ce serviciile sunt gata.</p>
-
-          <div class="status-box">
-            <div class="status-row">
-              <span>🌐 Web IDE Dashboard (Port 3000)</span>
-              <span class="badge-off" id="fe-status">Conectare...</span>
-            </div>
-            <div class="status-row">
-              <span>🔌 FastAPI Engine (Port 8000)</span>
-              <span class="badge-off" id="be-status">Verificare...</span>
-            </div>
-          </div>
-
-          <div class="instructions">
-            # Dacă rulezi din surse fără auto-start:<br>
-            Pe Windows: start_coreforge.bat<br>
-            Pe Linux:   ./start_coreforge.sh<br>
-            Docker:     docker compose up
-          </div>
-
-          <div class="btn-group">
-            <button onclick="checkNow()">
-              <span class="spinner" id="spin" style="display:none;"></span>
-              Reîncearcă Conexiunea
-            </button>
-          </div>
-        </div>
-
-        <script>
-          async function checkNow() {
-            document.getElementById('spin').style.display = 'inline-block';
-            try {
-              const res = await fetch('http://127.0.0.1:3000', { mode: 'no-cors' });
-              window.location.href = 'http://127.0.0.1:3000';
-            } catch (e) {
-              setTimeout(() => {
-                document.getElementById('spin').style.display = 'none';
-              }, 1200);
-            }
-          }
-
-          setInterval(async () => {
-            try {
-              await fetch('http://127.0.0.1:3000', { mode: 'no-cors' });
-              window.location.href = 'http://127.0.0.1:3000';
-            } catch (e) {}
-          }, 1500);
-        </script>
-      </body>
-    </html>
-  `)}`;
 }
 
 function createTray() {
@@ -390,7 +303,7 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: false
     }
   });
 
@@ -405,10 +318,10 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
-  // Handle load errors
+  // Handle load errors: fallback to offline screen
   mainWindow.webContents.on('did-fail-load', (event, errorCode) => {
     if (errorCode !== -3 && mainWindow) {
-      mainWindow.loadURL(getOfflineHtml());
+      mainWindow.loadFile(path.join(__dirname, 'offline.html'));
     }
   });
 
@@ -431,7 +344,7 @@ async function createWindow() {
   if (isReady && mainWindow) {
     mainWindow.loadURL(activeFrontendUrl);
   } else if (mainWindow) {
-    mainWindow.loadURL(getOfflineHtml());
+    mainWindow.loadFile(path.join(__dirname, 'offline.html'));
   }
 
   mainWindow.on('closed', () => {
@@ -449,6 +362,43 @@ app.on('second-instance', () => {
 });
 
 // IPC Handlers
+ipcMain.handle('start-services', async () => {
+  return await ensureServicesRunning(true);
+});
+
+ipcMain.handle('get-services-status', async () => {
+  const rootDir = findProjectRoot();
+  const backendReady = await checkHttpReady('http://127.0.0.1:8000/api/telemetry', 500);
+  const frontendReady = await checkHttpReady('http://localhost:3000', 500);
+  return {
+    rootDir,
+    backendReady,
+    frontendReady,
+    found: Boolean(rootDir)
+  };
+});
+
+ipcMain.handle('select-project-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selectează Folderul Proiectului CoreForge',
+    properties: ['openDirectory']
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+    const selected = result.filePaths[0];
+    if (isValidCoreForgeDir(selected)) {
+      saveProjectPath(selected);
+      return { success: true, path: selected };
+    } else {
+      return {
+        success: false,
+        error: 'Folderul selectat nu conține fișierele CoreForge (main.py și ai-dashboard).'
+      };
+    }
+  }
+  return { success: false, canceled: true };
+});
+
 ipcMain.handle('show-notification', (event, { title, body }) => {
   if (Notification.isSupported()) {
     const iconPath = path.join(__dirname, 'assets', 'icon.png');

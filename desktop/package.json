@@ -28,13 +28,14 @@
   "build": {
     "appId": "com.andrei.coreforge",
     "productName": "CoreForge",
-    "copyright": "Copyright \u00a9 2026 Andrei Morar & CoreForge",
+    "copyright": "Copyright © 2026 Andrei Morar & CoreForge",
     "directories": {
       "output": "../release"
     },
     "files": [
       "main.js",
       "preload.js",
+      "offline.html",
       "assets/**/*"
     ],
     "win": {

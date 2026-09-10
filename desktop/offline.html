@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <title>CoreForge 2026 — Hub Conexiune</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at top center, #111827 0%, #07090e 100%);
+      color: #f1f5f9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      user-select: none;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(12px);
+    }
+    .logo-container {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(99, 102, 241, 0.2));
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      font-size: 32px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 24px rgba(6, 182, 212, 0.25);
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .tagline {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .path-bar {
+      background: rgba(2, 6, 23, 0.7);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .path-text {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: ui-monospace, monospace;
+      color: #38bdf8;
+      max-width: 75%;
+      text-align: left;
+    }
+    .status-list {
+      background: rgba(2, 6, 23, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 12px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.07);
+    }
+    .status-row:last-child { border-bottom: none; }
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge-off { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-on { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge-wait { background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    button.btn-primary {
+      background: linear-gradient(135deg, #0284c7, #4f46e5);
+      color: #ffffff;
+      border: none;
+      padding: 13px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+    }
+    button.btn-primary:hover {
+      background: linear-gradient(135deg, #0ea5e9, #6366f1);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.45);
+    }
+    button.btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    button.btn-secondary {
+      background: rgba(30, 41, 59, 0.6);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button.btn-secondary:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: #fff;
+    }
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .footer-note {
+      margin-top: 20px;
+      font-size: 11px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo-container">⚡</div>
+    <h1>CoreForge 2026 v2.2.0</h1>
+    <p class="tagline">Nucleul de servicii locale nu este pornit sau nu răspunde.<br>Apasă butonul de mai jos pentru pornire automată într-un singur click.</p>
+
+    <div class="path-bar">
+      <span style="color: #94a3b8;">📁 Proiect:</span>
+      <span class="path-text" id="project-path">Căutare proiect...</span>
+      <button class="btn-secondary" id="btn-browse" onclick="selectFolder()" style="padding: 4px 10px; font-size: 11px;">Răsfoiește</button>
+    </div>
+
+    <div class="status-list">
+      <div class="status-row">
+        <span>🌐 Web IDE Dashboard (Port 3000)</span>
+        <span class="badge badge-off" id="fe-badge">Deconectat</span>
+      </div>
+      <div class="status-row">
+        <span>🔌 FastAPI Engine (Port 8000)</span>
+        <span class="badge badge-off" id="be-badge">Oprit</span>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="btn-start" onclick="startAllServices()">
+        <span id="btn-icon">▶</span>
+        <span id="btn-text">Pornește Toate Serviciile (1-Click)</span>
+      </button>
+      <button class="btn-secondary" id="btn-retry" onclick="checkStatus(true)">
+        🔄 Reîncearcă Conexiunea
+      </button>
+    </div>
+
+    <div class="footer-note" id="status-msg">
+      La pornire, CoreForge va lansa backend-ul Python și panoul Web automat.
+    </div>
+  </div>
+
+  <script>
+    let isStarting = false;
+
+    async function checkStatus(isManual = false) {
+      if (isStarting && !isManual) return;
+
+      const feBadge = document.getElementById('fe-badge');
+      const beBadge = document.getElementById('be-badge');
+      const pathEl = document.getElementById('project-path');
+      const statusMsg = document.getElementById('status-msg');
+
+      if (window.nexusDesktop && window.nexusDesktop.getServicesStatus) {
+        try {
+          const status = await window.nexusDesktop.getServicesStatus();
+          if (status.rootDir) {
+            pathEl.innerText = status.rootDir;
+            pathEl.title = status.rootDir;
+          } else {
+            pathEl.innerText = 'Neselectat (Apasă Răsfoiește)';
+          }
+
+          if (status.backendReady) {
+            beBadge.className = 'badge badge-on';
+            beBadge.innerText = 'Activ (8000)';
+          } else {
+            beBadge.className = 'badge badge-off';
+            beBadge.innerText = 'Oprit';
+          }
+
+          if (status.frontendReady) {
+            feBadge.className = 'badge badge-on';
+            feBadge.innerText = 'Gata (3000)';
+            statusMsg.innerText = 'Servicii active! Se redirecționează...';
+            setTimeout(() => {
+              window.location.href = 'http://localhost:3000';
+            }, 600);
+            return;
+          } else {
+            feBadge.className = 'badge badge-off';
+            feBadge.innerText = 'Deconectat';
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        // Fallback for direct browser testing
+        try {
+          const res = await fetch('http://localhost:3000', { mode: 'no-cors' });
+          window.location.href = 'http://localhost:3000';
+        } catch (e) {}
+      }
+    }
+
+    async function startAllServices() {
+      const btn = document.getElementById('btn-start');
+      const btnIcon = document.getElementById('btn-icon');
+      const btnText = document.getElementById('btn-text');
+      const statusMsg = document.getElementById('status-msg');
+
+      isStarting = true;
+      btn.disabled = true;
+      btnIcon.innerHTML = '<div class="spinner"></div>';
+      btnText.innerText = 'Se pornesc serviciile CoreForge...';
+      statusMsg.innerText = 'Lansare procese Python FastAPI și Next.js Web IDE...';
+
+      if (window.nexusDesktop && window.nexusDesktop.startServices) {
+        try {
+          const res = await window.nexusDesktop.startServices();
+          if (!res.success && res.reason === 'project_not_found') {
+            statusMsg.innerText = '⚠️ Proiectul nu a fost găsit. Folosește butonul "Răsfoiește" pentru a selecta folderul CoreForge.';
+            btn.disabled = false;
+            btnIcon.innerText = '▶';
+            btnText.innerText = 'Pornește Toate Serviciile';
+            isStarting = false;
+            return;
+          }
+        } catch (err) {
+          statusMsg.innerText = 'Eroare la lansare: ' + err.message;
+        }
+      }
+
+      // Poll until ready
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        if (window.nexusDesktop && window.nexusDesktop.getServicesStatus) {
+          const st = await window.nexusDesktop.getServicesStatus();
+          if (st.backendReady) {
+            document.getElementById('be-badge').className = 'badge badge-on';
+            document.getElementById('be-badge').innerText = 'Activ (8000)';
+          }
+          if (st.frontendReady) {
+            document.getElementById('fe-badge').className = 'badge badge-on';
+            document.getElementById('fe-badge').innerText = 'Gata (3000)';
+            clearInterval(pollInterval);
+            btnText.innerText = 'Conectat! Se deschide...';
+            setTimeout(() => {
+              window.location.href = 'http://localhost:3000';
+            }, 600);
+            return;
+          }
+        } else {
+          try {
+            await fetch('http://localhost:3000', { mode: 'no-cors' });
+            clearInterval(pollInterval);
+            window.location.href = 'http://localhost:3000';
+          } catch (e) {}
+        }
+
+        if (attempts > 45) {
+          clearInterval(pollInterval);
+          btn.disabled = false;
+          btnIcon.innerText = '▶';
+          btnText.innerText = 'Reîncearcă Pornirea';
+          statusMsg.innerText = 'Pornirea a durat mai mult decât de obicei. Verifică manual sau reîncearcă.';
+          isStarting = false;
+        }
+      }, 1000);
+    }
+
+    async function selectFolder() {
+      if (window.nexusDesktop && window.nexusDesktop.selectProjectFolder) {
+        const res = await window.nexusDesktop.selectProjectFolder();
+        if (res.success) {
+          document.getElementById('project-path').innerText = res.path;
+          checkStatus(true);
+        } else if (res.error) {
+          alert(res.error);
+        }
+      }
+    }
+
+    // Initial check and auto-polling
+    checkStatus();
+    setInterval(() => checkStatus(false), 2000);
+  </script>
+</body>
+</html>

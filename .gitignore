@@ -55,3 +55,4 @@ desktop.ini
 .idea/
 *.swp
 *.swo
+*.pid
