@@ -420,3 +420,37 @@ def test_open_project_vscode(client):
     data = res.json()
     assert "status" in data
     assert "path" in data
+
+def test_agent_templates_lifecycle(client):
+    res = client.get("/api/agents/templates")
+    assert res.status_code == 200
+    data = res.json()
+    assert "templates" in data
+    assert len(data["templates"]) >= 3
+
+    # Apply fullstack template
+    apply_res = client.post("/api/agents/templates/fullstack/apply")
+    assert apply_res.status_code == 200
+    apply_data = apply_res.json()
+    assert apply_data["status"] == "applied"
+    assert apply_data["count"] >= 3
+
+    # Verify agents list updated
+    agents_res = client.get("/api/agents")
+    assert agents_res.status_code == 200
+    agents = agents_res.json()
+    assert len(agents) == apply_data["count"]
+
+def test_skills_marketplace_toggle(client):
+    res = client.get("/api/tools")
+    assert res.status_code == 200
+    tools = res.json()
+    assert len(tools) >= 7
+    assert any(t["id"] == "DuckDuckGoSearchTool" for t in tools)
+
+    # Toggle tool
+    toggle_res = client.post("/api/tools/DuckDuckGoSearchTool/toggle")
+    assert toggle_res.status_code == 200
+    data = toggle_res.json()
+    assert "is_enabled" in data
+    assert data["tool_id"] == "DuckDuckGoSearchTool"

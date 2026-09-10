@@ -65,6 +65,26 @@ interface ToolItem {
   id: string;
   name: string;
   description: string;
+  category?: string;
+  badge?: string;
+  is_enabled?: boolean;
+}
+
+interface AgentTemplate {
+  id: string;
+  name: string;
+  tag: string;
+  badge_color: string;
+  description: string;
+  agents: {
+    name: string;
+    role: string;
+    goal: string;
+    backstory: string;
+    model: string;
+    temperature: number;
+    tools: string[];
+  }[];
 }
 
 interface Agent {
@@ -411,6 +431,53 @@ export default function Dashboard() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [availableTools, setAvailableTools] = useState<ToolItem[]>([]);
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false);
+  const [agentTemplates, setAgentTemplates] = useState<AgentTemplate[]>([]);
+  const [isApplyingTemplate, setIsApplyingTemplate] = useState<string | null>(null);
+  const [agentHubSubTab, setAgentHubSubTab] = useState<'squad' | 'skills'>('squad');
+
+  const fetchAgentTemplates = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/agents/templates`);
+      if (res.ok) {
+        const data = await res.json();
+        setAgentTemplates(data.templates || []);
+      }
+    } catch (e) {
+      console.error('Fetch templates error', e);
+    }
+  }, []);
+
+  const handleApplyTemplate = async (templateId: string) => {
+    setIsApplyingTemplate(templateId);
+    try {
+      const res = await fetch(`${API}/api/agents/templates/${templateId}/apply`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        await fetchAgentsAndModels();
+        addToast('Echipă Aplicată', 'Noua echipă de agenți a fost configurată cu succes!', 'success');
+        setShowTemplatesModal(false);
+      }
+    } catch (e) {
+      addToast('Eroare', 'Nu s-a putut aplica șablonul.', 'error');
+    } finally {
+      setIsApplyingTemplate(null);
+    }
+  };
+
+  const handleToggleTool = async (toolId: string) => {
+    try {
+      const res = await fetch(`${API}/api/tools/${toolId}/toggle`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAvailableTools(prev => prev.map(t => t.id === toolId ? { ...t, is_enabled: data.is_enabled } : t));
+        addToast('Skill Actualizat', `${toolId} este acum ${data.is_enabled ? 'activat' : 'dezactivat'}`, 'info');
+      }
+    } catch {
+      addToast('Eroare', 'Nu s-a putut schimba starea uneltei.', 'error');
+    }
+  };
   const [editingAgent, setEditingAgent] = useState<Agent | Partial<Agent> | null>(null);
 
   const [files, setFiles] = useState<Record<string, string>>({});
@@ -2939,17 +3006,53 @@ export default function Dashboard() {
           {/* ═══ TAB: AGENT HUB ═══ */}
           {tab === 'agents' && (
             <div className="max-w-5xl mx-auto space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold text-white flex items-center gap-2.5 mb-1">
-                    <Settings className="h-5 w-5 text-indigo-400" />
+                    <BrainCircuit className="h-5 w-5 text-indigo-400" />
                     Agent Customization Hub
                   </h2>
-                  <p className="text-sm text-slate-500">Configure your local worker swarm</p>
+                  <p className="text-sm text-slate-500">Configurează echipa autonomă de agenți și abilitățile active</p>
                 </div>
-                <button onClick={() => setEditingAgent({ name: '', role: '', goal: '', backstory: '', model: models[0] || 'llama3', temperature: 0.6, is_active: 1, tools: [] })}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg text-sm transition border border-indigo-500/20">
-                  <Plus className="h-4 w-4" /> New Agent
+                <div className="flex items-center gap-2.5">
+                  <button
+                    onClick={() => { setShowTemplatesModal(true); fetchAgentTemplates(); }}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 hover:from-indigo-500/30 hover:to-purple-500/30 text-indigo-300 rounded-lg text-xs font-semibold transition border border-indigo-500/30 shadow-[0_0_15px_rgba(99,102,241,0.15)] cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Șabloane Echipe (1-Click)</span>
+                  </button>
+                  <button onClick={() => setEditingAgent({ name: '', role: '', goal: '', backstory: '', model: models[0] || 'llama3', temperature: 0.6, is_active: 1, tools: [] })}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-semibold transition border border-indigo-500/20 cursor-pointer">
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Agent Nou</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-tab Switcher: Squad vs Skills Marketplace */}
+              <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
+                <button
+                  onClick={() => setAgentHubSubTab('squad')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    agentHubSubTab === 'squad'
+                      ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <UserX className="h-3.5 w-3.5" />
+                  <span>Echipa Activă ({agents.length})</span>
+                </button>
+                <button
+                  onClick={() => setAgentHubSubTab('skills')}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                    agentHubSubTab === 'skills'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Wrench className="h-3.5 w-3.5" />
+                  <span>Skills & Tools Marketplace ({availableTools.length})</span>
                 </button>
               </div>
 
@@ -3045,8 +3148,71 @@ export default function Dashboard() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {agents.map(agent => (
+              {agentHubSubTab === 'skills' && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/50 border border-slate-800 text-xs text-slate-400">
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-cyan-400" />
+                      Abilitățile activate sunt injectate automat în agenții care au nevoie de ele în timpul execuției CrewAI.
+                    </span>
+                    <span className="text-[11px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
+                      {availableTools.filter(t => t.is_enabled !== false).length} Active
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {availableTools.map(t => {
+                      const active = t.is_enabled !== false;
+                      return (
+                        <div
+                          key={t.id}
+                          className={`p-4 rounded-xl border backdrop-blur-sm transition-all duration-300 ${
+                            active
+                              ? 'bg-slate-900/80 border-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.06)]'
+                              : 'bg-slate-950/40 border-slate-800/80 opacity-60'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-3 mb-2">
+                            <div className="flex items-center gap-2.5">
+                              <div className={`p-2 rounded-lg ${active ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' : 'bg-slate-800 text-slate-500'}`}>
+                                <Wrench className="h-4 w-4" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-medium text-white flex items-center gap-2">
+                                  {t.name}
+                                  {t.badge && (
+                                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                                      {t.badge}
+                                    </span>
+                                  )}
+                                </h4>
+                                <span className="text-[10px] font-mono text-slate-400">{t.category || 'General'}</span>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleToggleTool(t.id)}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                                active ? 'bg-cyan-500' : 'bg-slate-800'
+                              }`}
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                                  active ? 'translate-x-4' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <p className="text-xs text-slate-400 leading-relaxed pl-10">{t.description}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {agentHubSubTab === 'squad' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {agents.map(agent => (
                   <div key={agent.id} className={`glass-panel p-5 rounded-2xl transition-all ${agent.is_active ? 'border-cyan-500/20' : 'opacity-60 border-slate-800'}`}>
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -3094,6 +3260,7 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
@@ -4648,6 +4815,70 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+
+      {/* ── Squad Templates Modal ── */}
+      {showTemplatesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-3xl rounded-2xl bg-[#080D1A] border border-indigo-500/40 p-6 shadow-[0_0_50px_rgba(99,102,241,0.2)] max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                  <Sparkles className="h-5 w-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white">Șabloane Profesionale de Echipe AI</h3>
+                  <p className="text-xs text-slate-400">Configurează instantaneu rolurile, uneltele și modelele pentru un anumit domeniu</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTemplatesModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 mt-5">
+              {agentTemplates.map(tmpl => (
+                <div
+                  key={tmpl.id}
+                  className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-indigo-500/40 transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-white">{tmpl.name}</h4>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                        {tmpl.tag}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">{tmpl.description}</p>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {tmpl.agents.map(a => (
+                        <span key={a.name} className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 border border-slate-700/60">
+                          {a.role}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleApplyTemplate(tmpl.id)}
+                    disabled={isApplyingTemplate === tmpl.id}
+                    className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition cursor-pointer shadow-sm disabled:opacity-50"
+                  >
+                    {isApplyingTemplate === tmpl.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    <span>Aplică Echipa (1-Click)</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Global Floating Toasts Container ── */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
         {toasts.map(t => (

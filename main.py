@@ -2044,14 +2044,91 @@ def get_models_library():
 
 
 
+AVAILABLE_TOOLS = [
+    {
+        "id": "FileReadTool",
+        "name": "File System Reader",
+        "category": "Filesystem",
+        "description": "Permite agenților să citească și să inspecteze fișiere de cod din proiect.",
+        "badge": "Core"
+    },
+    {
+        "id": "DirectoryReadTool",
+        "name": "Directory Inspector",
+        "category": "Filesystem",
+        "description": "Cartografiază structura de directoare și inspectează arborele de fișiere.",
+        "badge": "Core"
+    },
+    {
+        "id": "ScrapeWebsiteTool",
+        "name": "Web Scraper & Docs",
+        "category": "Web",
+        "description": "Extrage conținut text și documentații din pagini web și URL-uri externe.",
+        "badge": "Standard"
+    },
+    {
+        "id": "DuckDuckGoSearchTool",
+        "name": "Live Web Search",
+        "category": "Web",
+        "description": "Căutare online în timp real pentru soluționarea erorilor și API-uri recente.",
+        "badge": "Nou"
+    },
+    {
+        "id": "CodeRunnerTool",
+        "name": "Sandbox Code Runner",
+        "category": "Execution",
+        "description": "Execuție securizată de cod Python/Bash în mediu izolat sandbox.",
+        "badge": "Securizat"
+    },
+    {
+        "id": "DatabaseQueryTool",
+        "name": "Database Explorer",
+        "category": "Data",
+        "description": "Interogare baze de date SQLite și analiză automată de tabele.",
+        "badge": "Data"
+    },
+    {
+        "id": "GitAutomationTool",
+        "name": "Git Automator",
+        "category": "DevOps",
+        "description": "Automatizare commit-uri, branching și pregătire fișiere pentru release.",
+        "badge": "DevOps"
+    }
+]
+
 @app.get("/api/tools")
 def get_tools():
-    """Return available CrewAI tools for agents."""
+    """Return available CrewAI tools for agents with enabled status."""
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'enabled_skills'").fetchone()
+    
+    enabled_set = set(json.loads(row["value"])) if row else {t["id"] for t in AVAILABLE_TOOLS}
+    
     return [
-        {"id": "FileReadTool", "name": "File Reader", "description": "Reads and inspects code and files from disk"},
-        {"id": "DirectoryReadTool", "name": "Directory Reader", "description": "Lists and inspects folder structures and file trees"},
-        {"id": "ScrapeWebsiteTool", "name": "Web Scraper", "description": "Extracts text and data from web URLs and documentation"},
+        {**t, "is_enabled": t["id"] in enabled_set}
+        for t in AVAILABLE_TOOLS
     ]
+
+@app.post("/api/tools/{tool_id}/toggle")
+def toggle_tool(tool_id: str):
+    """Toggle activation of a skill/tool."""
+    with get_db() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = 'enabled_skills'").fetchone()
+        enabled = set(json.loads(row["value"])) if row else {t["id"] for t in AVAILABLE_TOOLS}
+        
+        if tool_id in enabled:
+            enabled.remove(tool_id)
+            status = "disabled"
+        else:
+            enabled.add(tool_id)
+            status = "enabled"
+            
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('enabled_skills', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (json.dumps(list(enabled)),)
+        )
+        conn.commit()
+        return {"tool_id": tool_id, "status": status, "is_enabled": status == "enabled"}
 
 @app.get("/api/agents")
 def get_agents():
@@ -2102,6 +2179,133 @@ def delete_agent(agent_id: int):
         conn.execute("DELETE FROM agents WHERE id = ?", (agent_id,))
         conn.commit()
     return {"status": "deleted"}
+
+
+AGENT_TEMPLATES = [
+    {
+        "id": "fullstack",
+        "name": "Echipa Full-Stack Web",
+        "tag": "🏆 Recomandat",
+        "badge_color": "cyan",
+        "description": "Dezvoltare completă de aplicații web moderne (Next.js + FastAPI + Baze de Date).",
+        "agents": [
+            {
+                "name": "Product Lead & Architect",
+                "role": "Arhitect Software & Coordonator",
+                "goal": "Planifică arhitectura modulară, specifică fișierele și structurează pașii de lucru",
+                "backstory": "Arhitect senior cu 15 ani experiență în sisteme distribuite și bune practici clean-code.",
+                "model": "qwen2.5-coder:latest",
+                "temperature": 0.2,
+                "tools": ["FileReadTool", "DirectoryReadTool"]
+            },
+            {
+                "name": "Frontend Designer",
+                "role": "Programator Frontend & UI/UX",
+                "goal": "Scrie interfețe responsive, estetice, moderne cu CSS/HTML și componente reactive",
+                "backstory": "Specialist UI cu simț estetic desăvârșit, expert în glassmorphism, flexbox și animații fluide.",
+                "model": "qwen2.5-coder:latest",
+                "temperature": 0.3,
+                "tools": ["FileReadTool"]
+            },
+            {
+                "name": "Backend Engineer",
+                "role": "Programator Backend & API",
+                "goal": "Implementează serverul API, rutele REST/WebSocket și persistența datelor",
+                "backstory": "Inginer backend axat pe performanță, validare riguroasă și cod robust.",
+                "model": "qwen2.5-coder:latest",
+                "temperature": 0.2,
+                "tools": ["FileReadTool", "DirectoryReadTool"]
+            },
+            {
+                "name": "QA & Security Auditor",
+                "role": "Tester QA & Securitate",
+                "goal": "Verifică sintaxa, rulează teste automate și previne breșele de securitate",
+                "backstory": "Auditor strict care identifică bug-uri ascunse și vulnerabilități înainte de producție.",
+                "model": "llama3.1:latest",
+                "temperature": 0.1,
+                "tools": ["FileReadTool"]
+            }
+        ]
+    },
+    {
+        "id": "cybersecurity",
+        "name": "Echipa Cybersecurity & Audit",
+        "tag": "🛡️ Securitate",
+        "badge_color": "emerald",
+        "description": "Audit de cod, scanare vulnerabilități OWASP și securizare endpoint-uri.",
+        "agents": [
+            {
+                "name": "SecOps Auditor",
+                "role": "Auditor Securitate & Conformitate",
+                "goal": "Analizează dependințele, variabilele secrete și configurările de rețea",
+                "backstory": "Specialist în standarde ISO 27001 și conformitate OWASP Top 10.",
+                "model": "llama3.1:latest",
+                "temperature": 0.1,
+                "tools": ["FileReadTool", "DirectoryReadTool"]
+            },
+            {
+                "name": "Code Hardening Engineer",
+                "role": "Inginer Refactoring & Protecție",
+                "goal": "Rescrie funcțiile vulnerabile, adaugă rate-limiting și sanitează input-urile",
+                "backstory": "Programator axat pe zero-trust architecture și apărare în adâncime.",
+                "model": "qwen2.5-coder:latest",
+                "temperature": 0.2,
+                "tools": ["FileReadTool"]
+            }
+        ]
+    },
+    {
+        "id": "datascience",
+        "name": "Echipa Data Science & ML",
+        "tag": "📊 Analiză Date",
+        "badge_color": "purple",
+        "description": "Prelucrare de date, statistici, grafice și predicții inteligente.",
+        "agents": [
+            {
+                "name": "Data Pipeline Engineer",
+                "role": "Inginer Procesare Date",
+                "goal": "Curăță seturile de date, normalizează valorile și extrage statistici cheie",
+                "backstory": "Expert în transformare ETL, SQL optimizat și pipeline-uri de date.",
+                "model": "qwen2.5-coder:latest",
+                "temperature": 0.2,
+                "tools": ["FileReadTool", "DirectoryReadTool"]
+            },
+            {
+                "name": "Insights Specialist",
+                "role": "Specialist Vizualizare & Insights",
+                "goal": "Generează rezumate executive, grafice informative și metrici de decizie",
+                "backstory": "Data analyst senior capabil să transforme cifre brute în decizii clare de business.",
+                "model": "llama3.1:latest",
+                "temperature": 0.3,
+                "tools": ["FileReadTool"]
+            }
+        ]
+    }
+]
+
+@app.get("/api/agents/templates")
+def get_agent_templates():
+    """Return pre-configured agent squad templates."""
+    return {"templates": AGENT_TEMPLATES}
+
+@app.post("/api/agents/templates/{template_id}/apply")
+def apply_agent_template(template_id: str):
+    """Replace active squad with selected persona template."""
+    tmpl = next((t for t in AGENT_TEMPLATES if t["id"] == template_id), None)
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found.")
+    
+    with get_db() as conn:
+        conn.execute("DELETE FROM agents")
+        for a in tmpl["agents"]:
+            tools_json = json.dumps(a["tools"])
+            conn.execute(
+                "INSERT INTO agents (name, role, goal, backstory, model, temperature, is_active, tools) VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+                (a["name"], a["role"], a["goal"], a["backstory"], a["model"], a["temperature"], tools_json)
+            )
+        conn.commit()
+    
+    return {"status": "applied", "template_name": tmpl["name"], "count": len(tmpl["agents"])}
 
 @app.get("/api/chat/local/sessions")
 def get_local_sessions():
