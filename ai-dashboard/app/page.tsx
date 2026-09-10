@@ -17,10 +17,11 @@ import { translations, Language } from '../lib/translations';
 import QRCode from 'qrcode';
 
 const getApiBase = () => {
-  if (typeof window !== 'undefined' && window.location.hostname) {
-    return `http://${window.location.hostname}:8000`;
+  // Use relative path in browser so all requests go through Next.js internal proxy on port 3000
+  if (typeof window !== 'undefined') {
+    return '';
   }
-  return 'http://localhost:8000';
+  return 'http://127.0.0.1:8000';
 };
 const API = {
   toString: () => getApiBase(),
