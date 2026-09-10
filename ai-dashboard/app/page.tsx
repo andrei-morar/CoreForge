@@ -13,6 +13,7 @@ import {
 import Editor from '@monaco-editor/react';
 import ReactFlow, { Background, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { translations, Language } from '../lib/translations';
 
 const API = 'http://localhost:8000';
 const CURRENT_APP_VERSION = '2.2.0';
@@ -420,6 +421,25 @@ function RoleBadge({ role }: { role: string }) {
 
 export default function Dashboard() {
   const [tab, setTab] = useState('system');
+  const [lang, setLang] = useState<Language>('ro');
+  const t = useMemo(() => translations[lang] || translations.ro, [lang]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('coreforge_lang') as Language;
+      if (saved && (saved === 'ro' || saved === 'en')) {
+        setLang(saved);
+      }
+    }
+  }, []);
+
+  const switchLanguage = (newLang: Language) => {
+    setLang(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('coreforge_lang', newLang);
+    }
+    addToast(newLang === 'ro' ? 'Limbă Schimbată' : 'Language Changed', newLang === 'ro' ? 'Interfața este acum în Română' : 'Interface is now in English', 'info');
+  };
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [prompt, setPrompt] = useState('');
@@ -1546,18 +1566,18 @@ export default function Dashboard() {
     } catch { /* ignore */ }
   };
 
-  // ── Tabs Config ──
-  const tabs = [
-    { id: 'system', label: 'Local AI & Hardware', icon: HardDrive },
-    { id: 'chat', label: 'Agent Command', icon: MessageSquare },
-    { id: 'direct', label: 'Direct Chat', icon: MessageCircle },
-    { id: 'ide', label: 'Code Editor', icon: Code2 },
-    { id: 'tokens', label: 'Token Analytics', icon: BarChart3 },
-    { id: 'agents', label: 'Agent Hub', icon: Layers },
-    { id: 'dashboard', label: 'Live Telemetry', icon: Cpu },
-    { id: 'database', label: 'Memory Archive', icon: Database },
-    { id: 'settings', label: 'Settings & Updates', icon: Sliders },
-  ];
+  // ── Tabs Config (Bilingual) ──
+  const tabs = useMemo(() => [
+    { id: 'system', label: t.nav_system, icon: HardDrive },
+    { id: 'chat', label: t.nav_command, icon: MessageSquare },
+    { id: 'direct', label: t.nav_chat, icon: MessageCircle },
+    { id: 'ide', label: t.nav_ide, icon: Code2 },
+    { id: 'tokens', label: t.nav_analytics, icon: BarChart3 },
+    { id: 'agents', label: t.nav_agents, icon: Layers },
+    { id: 'dashboard', label: t.nav_telemetry, icon: Cpu },
+    { id: 'database', label: t.nav_memory, icon: Database },
+    { id: 'settings', label: t.nav_settings, icon: Sliders },
+  ], [t]);
 
   // ── Local Chat Function with SSE Real-Time Streaming ──
   const handleLocalChat = async () => {
@@ -1675,13 +1695,36 @@ export default function Dashboard() {
       {/* ── Sidebar ── */}
       <aside className="w-64 border-r border-slate-800/80 bg-[#0B0F17]/70 backdrop-blur-xl flex flex-col">
         <div className="p-5">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center animate-breathing">
-              <Zap className="h-5 w-5 text-white" />
+          <div className="flex items-center justify-between gap-2 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center animate-breathing shrink-0">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="font-bold tracking-wider text-sm text-white">COREFORGE</h1>
+                <p className="text-[10px] text-cyan-400 font-mono tracking-[0.25em]">LOCAL AI 2026</p>
+              </div>
             </div>
-            <div>
-              <h1 className="font-bold tracking-wider text-sm text-white">COREFORGE</h1>
-              <p className="text-[10px] text-cyan-400 font-mono tracking-[0.25em]">LOCAL AI 2026</p>
+            {/* Bilingual Switcher */}
+            <div className="flex items-center gap-0.5 bg-[#05070B] p-1 rounded-lg border border-slate-800 shrink-0">
+              <button
+                onClick={() => switchLanguage('ro')}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                  lang === 'ro' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                }`}
+                title="Română"
+              >
+                RO
+              </button>
+              <button
+                onClick={() => switchLanguage('en')}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                  lang === 'en' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-300'
+                }`}
+                title="English"
+              >
+                EN
+              </button>
             </div>
           </div>
           <nav className="space-y-1.5">
