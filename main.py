@@ -1524,21 +1524,48 @@ def get_system_specs():
 
 @app.get("/api/system/mobile-connect")
 def get_mobile_connect():
-    """Returns local LAN IP, direct URL to Next.js frontend, and base64 QR code for instant iOS/iPad connection."""
+    """Returns local LAN IP, direct URL to Next.js frontend, all active interfaces (prioritizing Wi-Fi), and base64 QR code for instant iOS/iPad connection."""
     import socket, io, base64
     try:
         import qrcode
     except ImportError:
         qrcode = None
 
-    lan_ip = "127.0.0.1"
+    # Detect all active IPv4 interfaces
+    interfaces = []
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(('10.255.255.255', 1))
-        lan_ip = s.getsockname()[0]
-        s.close()
-    except Exception:
-        pass
+        import psutil
+        for iface_name, addrs in psutil.net_if_addrs().items():
+            if iface_name == 'lo':
+                continue
+            for addr in addrs:
+                if addr.family == socket.AF_INET and not addr.address.startswith('127.'):
+                    is_wifi = iface_name.startswith(('wl', 'wi'))
+                    label = f"Wi-Fi ({addr.address})" if is_wifi else f"LAN {iface_name} ({addr.address})"
+                    interfaces.append({
+                        "interface": iface_name,
+                        "ip": addr.address,
+                        "is_wifi": is_wifi,
+                        "label": label
+                    })
+        # Prioritize Wi-Fi interface first so mobile phones on Wi-Fi connect seamlessly
+        interfaces.sort(key=lambda x: not x["is_wifi"])
+    except Exception as e:
+        logger.warning(f"Could not inspect net_if_addrs: {e}")
+
+    # Fallback to default route socket if no interface discovered
+    if interfaces:
+        lan_ip = interfaces[0]["ip"]
+    else:
+        lan_ip = "127.0.0.1"
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(('10.255.255.255', 1))
+            lan_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            pass
+        interfaces = [{"interface": "default", "ip": lan_ip, "is_wifi": False, "label": f"Default ({lan_ip})"}]
 
     frontend_port = 3000
     mobile_url = f"http://{lan_ip}:{frontend_port}"
@@ -1562,6 +1589,7 @@ def get_mobile_connect():
         "lan_ip": lan_ip,
         "port": frontend_port,
         "url": mobile_url,
+        "interfaces": interfaces,
         "qr_data_url": qr_data_url,
         "instructions": {
             "ro": [

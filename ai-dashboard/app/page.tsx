@@ -36,6 +36,7 @@ interface MobileConnectInfo {
   port: number;
   url: string;
   qr_data_url: string;
+  interfaces?: { interface: string; ip: string; is_wifi: boolean; label: string }[];
   instructions: {
     ro: string[];
     en: string[];
@@ -884,7 +885,7 @@ export default function Dashboard() {
     // 2. Instant client-side fallback if backend is slow or offline
     const fallbackHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost'
       ? window.location.hostname
-      : '192.168.1.77';
+      : '192.168.1.188';
     const fallbackUrl = `http://${fallbackHost}:3000`;
     const fallbackQr = await generateClientQr(fallbackUrl);
     setMobileConnect({
@@ -921,6 +922,12 @@ export default function Dashboard() {
       fetchMobileConnect();
     }
   }, [tab, settingsSubTab, fetchMobileConnect]);
+
+  const handleSelectInterface = async (ip: string) => {
+    const newUrl = `http://${ip}:3000`;
+    const newQr = await generateClientQr(newUrl);
+    setMobileConnect(prev => prev ? { ...prev, lan_ip: ip, url: newUrl, qr_data_url: newQr } : null);
+  };
 
   const handleCopyMobileUrl = () => {
     if (!mobileConnect?.url) return;
@@ -4633,6 +4640,32 @@ export default function Dashboard() {
                           <div className="w-52 h-52 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-500">
                             <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mb-2" />
                             <span className="text-xs font-mono">Generare QR Code...</span>
+                          </div>
+                        )}
+
+                        {/* Network Adapter Switcher (Wi-Fi vs LAN vs USB) */}
+                        {mobileConnect?.interfaces && mobileConnect.interfaces.length > 1 && (
+                          <div className="w-full mt-4 space-y-1.5 text-left">
+                            <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                              <span>Adaptor de Rețea Activ:</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {mobileConnect.interfaces.map(iface => (
+                                <button
+                                  key={iface.interface}
+                                  type="button"
+                                  onClick={() => handleSelectInterface(iface.ip)}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer border ${
+                                    mobileConnect.lan_ip === iface.ip
+                                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                                      : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
+                                  }`}
+                                >
+                                  <span>{iface.is_wifi ? '📶' : '🔌'}</span>
+                                  <span>{iface.label}</span>
+                                </button>
+                              ))}
+                            </div>
                           </div>
                         )}
 
