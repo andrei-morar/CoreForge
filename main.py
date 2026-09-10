@@ -54,7 +54,7 @@ except ImportError:
 app = FastAPI(
     title="CoreForge 2026",
     description="Hierarchical AI Agent Orchestration Platform",
-    version="2.2.0",
+    version="2.3.0",
 )
 
 # ─── Load Environment Variables ──────────────────────────────────────────────
@@ -1522,7 +1522,7 @@ def get_system_specs():
     }
 
 
-CURRENT_APP_VERSION = "2.2.0"
+CURRENT_APP_VERSION = "2.3.0"
 
 @app.get("/api/system/check-updates")
 def check_for_updates(repo: str = "andrei-morar/CoreForge"):

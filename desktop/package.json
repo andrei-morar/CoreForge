@@ -1,6 +1,6 @@
 {
   "name": "coreforge-desktop",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "CoreForge 2026 - Desktop Application (100% Local AI Multi-Agent IDE)",
   "main": "main.js",
   "scripts": {

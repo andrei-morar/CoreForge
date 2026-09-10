@@ -22,7 +22,7 @@ let mainWindow = null;
 let tray = null;
 app.isQuitting = false;
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 let activeFrontendUrl = process.env.NEXUS_FRONTEND_URL || 'http://localhost:3000';
 const BACKEND_URL = process.env.NEXUS_BACKEND_URL || 'http://127.0.0.1:8000';
 

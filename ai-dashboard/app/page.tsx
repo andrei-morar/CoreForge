@@ -16,7 +16,7 @@ import 'reactflow/dist/style.css';
 import { translations, Language } from '../lib/translations';
 
 const API = 'http://localhost:8000';
-const CURRENT_APP_VERSION = '2.2.0';
+const CURRENT_APP_VERSION = '2.3.0';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
