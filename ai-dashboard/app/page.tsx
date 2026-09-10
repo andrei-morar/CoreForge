@@ -1045,6 +1045,36 @@ export default function Dashboard() {
     }
   };
 
+  const handleExportTokensCsv = () => {
+    if (!tokenAnalytics?.recent_events || tokenAnalytics.recent_events.length === 0) {
+      addToast('Analitice', 'Nu există evenimente de exportat.', 'info');
+      return;
+    }
+    const headers = ['ID', 'Sursa', 'Sesiune/Job', 'Model', 'Prompt Tokens', 'Completion Tokens', 'Total Tokens', 'Durata (ms)', 'Data'];
+    const rows = tokenAnalytics.recent_events.map((e: any) => [
+      e.id,
+      e.source,
+      e.session_or_job_id,
+      e.model,
+      e.prompt_tokens,
+      e.completion_tokens,
+      e.total_tokens,
+      e.duration_ms,
+      e.timestamp
+    ]);
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coreforge_tokens_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    addToast('Raport CSV', 'Fișierul CSV a fost descărcat cu succes.', 'success');
+  };
+
   const handleClearTokens = async () => {
     if (!confirm('Ești sigur că vrei să resetezi toate statisticile locale de tokeni?')) return;
     try {
@@ -3707,6 +3737,15 @@ export default function Dashboard() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleExportTokensCsv}
+                    title="Exportă raport detaliat în format CSV"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-950/30 hover:bg-emerald-900/40 text-emerald-400 text-xs font-medium rounded-xl border border-emerald-500/30 transition cursor-pointer"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span>Export CSV</span>
+                  </button>
+
                   <button
                     onClick={fetchTokenAnalytics}
                     disabled={isLoadingTokens}
