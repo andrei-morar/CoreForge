@@ -7,7 +7,7 @@ import {
   BrainCircuit, Monitor, Server, HardDrive, ChevronRight, ChevronDown, Download,
   Settings, Edit2, Plus, Save, UserX, Code2, FileCode, Play, MessageCircle,
   Terminal, Folder, FolderPlus, FilePlus, FileText, Wrench, X, Check, Shield, Layers,
-  Cloud, ShieldCheck, Key, Sparkles, BarChart3, Coins, TrendingUp, PieChart,
+  Cloud, ShieldCheck, Key, Sparkles, BarChart3, Coins, TrendingUp, PieChart, AlertTriangle,
   Package, ExternalLink
 } from 'lucide-react';
 import Editor from '@monaco-editor/react';
@@ -543,6 +543,19 @@ export default function Dashboard() {
     }
   }, []);
 
+  // ── In-App Floating Toasts System ──
+  const [toasts, setToasts] = useState<{ id: string; title: string; message: string; type: 'success' | 'error' | 'info' | 'warning' }[]>([]);
+
+  const addToast = useCallback((title: string, message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, title, message, type }]);
+    notifyUser(title, message);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, [notifyUser]);
+
+
   const handleAutoFix = async () => {
     if (!activeProject || isAutoFixing) return;
     setIsAutoFixing(true);
@@ -1014,7 +1027,7 @@ export default function Dashboard() {
       });
       if (res.ok) {
         setSavedFiles(prev => ({ ...prev, [target]: files[target] }));
-        setSaveStatus('saved');
+        setSaveStatus('saved'); addToast('Fișier Salvat', `Modificările au fost salvate pe disc`, 'success');
         setTimeout(() => setSaveStatus(null), 2500);
       } else {
         setSaveStatus('error');
@@ -1044,7 +1057,7 @@ export default function Dashboard() {
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(url); addToast('Export Proiect', 'Arhiva ZIP a fost descărcată cu succes', 'success');
       }
     } catch (e) {
       console.error('Export zip failed', e);
@@ -1376,7 +1389,7 @@ export default function Dashboard() {
           if (data.status === 'completed') {
             setAgentResponse(data.result);
             setSending(false);
-            notifyUser('CoreForge Swarm', `Sarcina de generare a fost finalizată cu succes!`);
+            addToast('CoreForge Swarm', 'Sarcina de generare a fost finalizată cu succes!', 'success');
             if (data.download_url) {
               fetch(`${API}/api/job/${data.job_id}/files`)
                 .then(r => r.json())
@@ -1390,7 +1403,7 @@ export default function Dashboard() {
           } else if (data.status === 'failed') {
             setAgentResponse(`Error: ${data.error}`);
             setSending(false);
-            notifyUser('CoreForge Alert', `Execuția swarm a eșuat: ${data.error || 'Necunoscut'}`);
+            addToast('CoreForge Alert', `Execuția a eșuat: ${data.error || 'Necunoscut'}`, 'error');
           }
         }
       } catch { /* ignore */ }
@@ -4635,6 +4648,41 @@ export default function Dashboard() {
           </div>
         )}
       </main>
+      {/* ── Global Floating Toasts Container ── */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 pointer-events-none max-w-sm w-full">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`pointer-events-auto flex items-start gap-3 p-3.5 rounded-xl border backdrop-blur-xl shadow-2xl transition-all duration-300 animate-in fade-in slide-in-from-bottom-5 ${
+              t.type === 'success'
+                ? 'bg-emerald-950/90 border-emerald-500/40 text-emerald-200 shadow-emerald-950/50'
+                : t.type === 'error'
+                ? 'bg-red-950/90 border-red-500/40 text-red-200 shadow-red-950/50'
+                : t.type === 'warning'
+                ? 'bg-amber-950/90 border-amber-500/40 text-amber-200 shadow-amber-950/50'
+                : 'bg-slate-900/90 border-cyan-500/40 text-cyan-200 shadow-cyan-950/50'
+            }`}
+          >
+            <div className="mt-0.5 shrink-0">
+              {t.type === 'success' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+              {t.type === 'error' && <XCircle className="h-5 w-5 text-red-400" />}
+              {t.type === 'warning' && <AlertTriangle className="h-5 w-5 text-amber-400" />}
+              {t.type === 'info' && <Sparkles className="h-5 w-5 text-cyan-400" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold text-white tracking-wide">{t.title}</div>
+              <div className="text-[11px] opacity-80 mt-0.5 leading-relaxed">{t.message}</div>
+            </div>
+            <button
+              onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+              className="text-slate-400 hover:text-white transition shrink-0 p-0.5 cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+
     </div>
   );
 }
