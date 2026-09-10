@@ -14,6 +14,7 @@ import Editor from '@monaco-editor/react';
 import ReactFlow, { Background, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { translations, Language } from '../lib/translations';
+import QRCode from 'qrcode';
 
 const getApiBase = () => {
   if (typeof window !== 'undefined' && window.location.hostname) {
@@ -852,14 +853,68 @@ export default function Dashboard() {
 
   useEffect(() => { if (settingsSubTab === 'models') fetchModelsDetail(); }, [settingsSubTab, fetchModelsDetail]);
 
+  // Instant client-side QR generator
+  const generateClientQr = useCallback(async (targetUrl: string) => {
+    try {
+      const dataUrl = await QRCode.toDataURL(targetUrl, {
+        margin: 2,
+        width: 280,
+        color: { dark: '#080D1A', light: '#FFFFFF' }
+      });
+      return dataUrl;
+    } catch {
+      return '';
+    }
+  }, []);
+
   const fetchMobileConnect = useCallback(async () => {
+    // 1. Try fetching official LAN IP and instructions from backend
     try {
       const res = await fetch(`${API}/api/system/mobile-connect`);
       if (res.ok) {
-        setMobileConnect(await res.json());
+        const data = await res.json();
+        if (!data.qr_data_url && data.url) {
+          data.qr_data_url = await generateClientQr(data.url);
+        }
+        setMobileConnect(data);
+        return;
       }
-    } catch { /* ignore */ }
-  }, []);
+    } catch { /* fallback below */ }
+
+    // 2. Instant client-side fallback if backend is slow or offline
+    const fallbackHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost'
+      ? window.location.hostname
+      : '192.168.1.77';
+    const fallbackUrl = `http://${fallbackHost}:3000`;
+    const fallbackQr = await generateClientQr(fallbackUrl);
+    setMobileConnect({
+      status: 'online',
+      lan_ip: fallbackHost,
+      port: 3000,
+      url: fallbackUrl,
+      qr_data_url: fallbackQr,
+      instructions: {
+        ro: [
+          "Conectează iPhone-ul sau iPad-ul la aceeași rețea Wi-Fi cu acest calculator.",
+          "Deschide Camera foto de pe iPhone/iPad și scanează codul QR de mai sus (sau introdu link-ul în Safari).",
+          "Apasă pe butonul de Partajare (Share - iconița cu pătrat și săgeată sus din Safari).",
+          "Alege opțiunea 'Adaugă la ecranul principal' (Add to Home Screen).",
+          "CoreForge se va deschide ca o aplicație nativă fără bara de adrese Safari, cu bară de navigare tactilă dedicată."
+        ],
+        en: [
+          "Connect your iPhone or iPad to the same Wi-Fi network as this PC.",
+          "Open your iPhone/iPad Camera and scan the QR code above (or type the link into Safari).",
+          "Tap the Share icon (square with arrow pointing up) at the bottom of Safari.",
+          "Select 'Add to Home Screen'.",
+          "CoreForge will launch full-screen like a native iOS app without Safari navigation bars, equipped with a bottom touch tab bar."
+        ]
+      }
+    });
+  }, [generateClientQr]);
+
+  useEffect(() => {
+    fetchMobileConnect();
+  }, [fetchMobileConnect]);
 
   useEffect(() => {
     if (tab === 'settings' || settingsSubTab === 'mobile') {
