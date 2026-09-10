@@ -664,14 +664,17 @@ export default function Dashboard() {
   // ── In-App Floating Toasts System ──
   const [toasts, setToasts] = useState<{ id: string; title: string; message: string; type: 'success' | 'error' | 'info' | 'warning' }[]>([]);
 
-  const addToast = useCallback((title: string, message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts(prev => [...prev, { id, title, message, type }]);
+  const toastIdRef = useRef(0);
+  const addToast = useCallback((title: string, message: string, type?: 'success' | 'error' | 'info' | 'warning') => {
+    toastIdRef.current += 1;
+    const id = `toast-${toastIdRef.current}-${Date.now()}`;
+    const toastType = type || 'info';
+    setToasts(prev => [...prev, { id, title, message, type: toastType }]);
     notifyUser(title, message);
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, 4500);
-  }, [notifyUser]);
+  }, [notifyUser, setToasts]);
 
 
   const handleAutoFix = async () => {
