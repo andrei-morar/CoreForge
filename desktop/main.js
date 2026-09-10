@@ -1,6 +1,8 @@
 const { app, BrowserWindow, shell, ipcMain, Tray, Menu, Notification, nativeImage } = require('electron');
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
+const { spawn } = require('child_process');
 
 // Linux-only sandbox adjustments (Ubuntu 24.04 unprivileged user namespace restrictions)
 if (process.platform === 'linux') {
@@ -23,7 +25,34 @@ const APP_VERSION = '2.2.0';
 let activeFrontendUrl = process.env.NEXUS_FRONTEND_URL || 'http://127.0.0.1:3000';
 const BACKEND_URL = process.env.NEXUS_BACKEND_URL || 'http://127.0.0.1:8000';
 
-// Check if an HTTP service is responding
+// Track spawned child processes for clean termination on quit
+const spawnedChildren = [];
+
+function findPythonExecutable(rootDir) {
+  const isWin = process.platform === 'win32';
+  const candidates = isWin
+    ? [
+        path.join(rootDir, 'agent_env', 'Scripts', 'python.exe'),
+        path.join(rootDir, 'venv', 'Scripts', 'python.exe'),
+        path.join(rootDir, 'env', 'Scripts', 'python.exe'),
+        'python'
+      ]
+    : [
+        path.join(rootDir, 'agent_env', 'bin', 'python'),
+        path.join(rootDir, 'agent_env', 'bin', 'python3'),
+        path.join(rootDir, 'venv', 'bin', 'python'),
+        path.join(rootDir, 'venv', 'bin', 'python3'),
+        'python3',
+        'python'
+      ];
+
+  for (const p of candidates) {
+    if (p === 'python' || p === 'python3') return p;
+    if (fs.existsSync(p)) return p;
+  }
+  return isWin ? 'python' : 'python3';
+}
+
 function checkHttpReady(url, timeoutMs = 1200) {
   return new Promise((resolve) => {
     let resolved = false;
@@ -51,8 +80,66 @@ function checkHttpReady(url, timeoutMs = 1200) {
   });
 }
 
+// 1-Click Launch: Auto-start backend and frontend if not running
+async function ensureServicesRunning() {
+  const rootDir = path.resolve(__dirname, '..');
+  const backendMainPy = path.join(rootDir, 'main.py');
+  const frontendDir = path.join(rootDir, 'ai-dashboard');
+
+  // Check backend
+  const backendReady = await checkHttpReady('http://127.0.0.1:8000/api/telemetry', 800);
+  if (!backendReady && fs.existsSync(backendMainPy)) {
+    const pythonExe = findPythonExecutable(rootDir);
+    try {
+      const backendProc = spawn(pythonExe, [backendMainPy], {
+        cwd: rootDir,
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: { ...process.env, PYTHONUNBUFFERED: '1' }
+      });
+      spawnedChildren.push(backendProc);
+    } catch (e) {
+      console.error('Failed to spawn backend:', e);
+    }
+  }
+
+  // Check frontend
+  const frontendReady = await checkHttpReady('http://127.0.0.1:3000', 800);
+  if (!frontendReady && fs.existsSync(path.join(frontendDir, 'package.json'))) {
+    const isWin = process.platform === 'win32';
+    const npmCmd = isWin ? 'npm.cmd' : 'npm';
+    try {
+      const frontendProc = spawn(npmCmd, ['run', 'dev'], {
+        cwd: frontendDir,
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: true,
+        env: { ...process.env }
+      });
+      spawnedChildren.push(frontendProc);
+    } catch (e) {
+      console.error('Failed to spawn frontend:', e);
+    }
+  }
+}
+
+function cleanupChildProcesses() {
+  for (const proc of spawnedChildren) {
+    try {
+      if (proc && !proc.killed) {
+        if (process.platform === 'win32') {
+          spawn('taskkill', ['/pid', proc.pid.toString(), '/f', '/t'], { stdio: 'ignore' });
+        } else {
+          proc.kill('SIGTERM');
+        }
+      }
+    } catch (e) {}
+  }
+}
+
 // Poll server readiness
-async function waitForServer(maxAttempts = 15, intervalMs = 600) {
+async function waitForServer(maxAttempts = 30, intervalMs = 600) {
   const candidateUrls = [
     activeFrontendUrl,
     'http://localhost:3000',
@@ -104,10 +191,7 @@ function getOfflineHtml() {
             text-align: center;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
           }
-          .logo {
-            font-size: 38px;
-            margin-bottom: 12px;
-          }
+          .logo { font-size: 38px; margin-bottom: 12px; }
           h1 {
             margin: 0 0 10px 0;
             font-size: 24px;
@@ -158,11 +242,7 @@ function getOfflineHtml() {
             margin-bottom: 24px;
             overflow-x: auto;
           }
-          .btn-group {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-          }
+          .btn-group { display: flex; gap: 12px; justify-content: center; }
           button {
             background: linear-gradient(135deg, #06b6d4, #4f46e5);
             color: #ffffff;
@@ -194,12 +274,12 @@ function getOfflineHtml() {
         <div class="card">
           <div class="logo">⚡</div>
           <h1>CoreForge 2026 v${APP_VERSION}</h1>
-          <p class="subtitle">Nucleul local de agenți AI nu este pornit sau nu răspunde pe portul 3000.<br>Pornește serviciul local pentru a încărca spațiul de lucru.</p>
+          <p class="subtitle">Nucleul local de servicii se inițializează sau nu răspunde pe portul 3000.<br>Aplicația se va conecta automat de îndată ce serviciile sunt gata.</p>
 
           <div class="status-box">
             <div class="status-row">
               <span>🌐 Web IDE Dashboard (Port 3000)</span>
-              <span class="badge-off" id="fe-status">Offline</span>
+              <span class="badge-off" id="fe-status">Conectare...</span>
             </div>
             <div class="status-row">
               <span>🔌 FastAPI Engine (Port 8000)</span>
@@ -208,12 +288,10 @@ function getOfflineHtml() {
           </div>
 
           <div class="instructions">
-            # Pe Windows (PowerShell / Command Prompt):<br>
-            start_coreforge.bat<br><br>
-            # Pe Linux / WSL (Ubuntu):<br>
-            ./start_coreforge.sh<br><br>
-            # Sau cu Docker Compose:<br>
-            docker compose up
+            # Dacă rulezi din surse fără auto-start:<br>
+            Pe Windows: start_coreforge.bat<br>
+            Pe Linux:   ./start_coreforge.sh<br>
+            Docker:     docker compose up
           </div>
 
           <div class="btn-group">
@@ -237,13 +315,12 @@ function getOfflineHtml() {
             }
           }
 
-          // Auto-poll every 2 seconds to transition smoothly when servers start
           setInterval(async () => {
             try {
               await fetch('http://127.0.0.1:3000', { mode: 'no-cors' });
               window.location.href = 'http://127.0.0.1:3000';
             } catch (e) {}
-          }, 2000);
+          }, 1500);
         </script>
       </body>
     </html>
@@ -319,7 +396,7 @@ async function createWindow() {
 
   mainWindow.setMenuBarVisibility(false);
 
-  // Open external links in default system browser
+  // Open external links in default browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
@@ -328,15 +405,13 @@ async function createWindow() {
     return { action: 'allow' };
   });
 
-  // Handle load errors gracefully
+  // Handle load errors
   mainWindow.webContents.on('did-fail-load', (event, errorCode) => {
-    // -3 = ABORTED (e.g. redirected or manual stop), ignore
     if (errorCode !== -3 && mainWindow) {
       mainWindow.loadURL(getOfflineHtml());
     }
   });
 
-  // Minimize to tray on close
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
@@ -345,13 +420,14 @@ async function createWindow() {
     return false;
   });
 
-  // Show window when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  // Initial connection attempt with brief splash
-  const isReady = await waitForServer(12, 500);
+  // 1-Click Launch: ensure backend and frontend are triggered
+  ensureServicesRunning();
+
+  const isReady = await waitForServer(25, 600);
   if (isReady && mainWindow) {
     mainWindow.loadURL(activeFrontendUrl);
   } else if (mainWindow) {
@@ -363,7 +439,7 @@ async function createWindow() {
   });
 }
 
-// Single instance event handling: restore window when launched again
+// Single instance event handling
 app.on('second-instance', () => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -412,6 +488,26 @@ ipcMain.handle('check-updates', async () => {
   });
 });
 
+ipcMain.handle('apply-update', async (event, { filePath }) => {
+  if (!filePath) return false;
+  try {
+    if (process.platform === 'win32') {
+      shell.openPath(filePath);
+    } else if (filePath.endsWith('.AppImage')) {
+      spawn(filePath, [], { detached: true, stdio: 'ignore' }).unref();
+    } else {
+      shell.openPath(filePath);
+    }
+    setTimeout(() => {
+      app.isQuitting = true;
+      app.quit();
+    }, 1200);
+    return true;
+  } catch (err) {
+    return false;
+  }
+});
+
 app.whenReady().then(() => {
   createTray();
   createWindow();
@@ -419,10 +515,12 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   app.isQuitting = true;
+  cleanupChildProcesses();
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    cleanupChildProcesses();
     app.quit();
   }
 });

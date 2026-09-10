@@ -94,7 +94,7 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
-                timestamp TEXT NOT NULL
+                timestamp TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             )
         """)
         conn.execute("""
@@ -149,7 +149,7 @@ def init_db() -> None:
                 completion_tokens INTEGER NOT NULL DEFAULT 0,
                 total_tokens INTEGER NOT NULL DEFAULT 0,
                 duration_ms REAL DEFAULT 0,
-                timestamp TEXT NOT NULL
+                timestamp TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             )
         """)
         conn.execute("""
@@ -1546,6 +1546,150 @@ def check_for_updates(repo: str = "andrei-morar/CoreForge"):
         result["message"] = f"Verificare locală: v{CURRENT_APP_VERSION} (Repo GitHub: {repo})"
 
     return result
+
+
+class UpdateDownloadRequest(BaseModel):
+    version: str = ""
+    asset_url: str | None = None
+
+update_download_lock = threading.Lock()
+update_download_state = {
+    "status": "idle",
+    "version": "",
+    "percent": 0,
+    "downloaded_mb": 0.0,
+    "total_mb": 0.0,
+    "speed_mbps": 0.0,
+    "target_file": None,
+    "error": None
+}
+
+def run_update_download_worker(asset_url: str, version: str):
+    global update_download_state
+    try:
+        cache_dir = os.path.join(tempfile.gettempdir(), "coreforge_updates")
+        os.makedirs(cache_dir, exist_ok=True)
+        filename = os.path.basename(asset_url.split("?")[0]) or f"coreforge-update-{version}"
+        target_path = os.path.join(cache_dir, filename)
+
+        req = urllib.request.Request(
+            asset_url,
+            headers={"User-Agent": "CoreForge-Updater"}
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            total_bytes = int(resp.headers.get("Content-Length", 0))
+            total_mb = round(total_bytes / (1024 * 1024), 2) if total_bytes > 0 else 0.0
+
+            downloaded = 0
+            start_time = time.time()
+            chunk_size = 64 * 1024
+
+            with open(target_path, "wb") as out_file:
+                while True:
+                    chunk = resp.read(chunk_size)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
+                    downloaded += len(chunk)
+                    elapsed = time.time() - start_time
+                    downloaded_mb = round(downloaded / (1024 * 1024), 2)
+                    speed_mbps = round(downloaded_mb / elapsed, 2) if elapsed > 0 else 0.0
+                    percent = round((downloaded / total_bytes) * 100, 1) if total_bytes > 0 else min(99, downloaded_mb * 2)
+
+                    with update_download_lock:
+                        if update_download_state["status"] == "cancelled":
+                            break
+                        update_download_state.update({
+                            "status": "downloading",
+                            "percent": percent,
+                            "downloaded_mb": downloaded_mb,
+                            "total_mb": total_mb,
+                            "speed_mbps": speed_mbps,
+                            "target_file": target_path
+                        })
+
+            if os.name != 'nt':
+                try:
+                    os.chmod(target_path, 0o755)
+                except Exception:
+                    pass
+
+            with update_download_lock:
+                if update_download_state["status"] != "cancelled":
+                    update_download_state.update({
+                        "status": "completed",
+                        "percent": 100,
+                        "downloaded_mb": total_mb or downloaded_mb,
+                        "target_file": target_path,
+                        "error": None
+                    })
+    except Exception as e:
+        with update_download_lock:
+            update_download_state.update({
+                "status": "error",
+                "error": str(e)
+            })
+
+@app.post("/api/system/update/download")
+def start_update_download(req: UpdateDownloadRequest):
+    global update_download_state
+    url = req.asset_url
+    if not url:
+        info = check_for_updates()
+        assets = info.get("assets", {})
+        if os.name == "nt":
+            url = assets.get("windows_exe")
+        else:
+            url = assets.get("linux_deb") or assets.get("linux_appimage")
+    
+    if not url:
+        raise HTTPException(status_code=400, detail="Nu a fost găsit niciun pachet compatibil de descărcat.")
+
+    with update_download_lock:
+        if update_download_state["status"] == "downloading":
+            return {"status": "already_downloading", "state": dict(update_download_state)}
+        update_download_state = {
+            "status": "downloading",
+            "version": req.version or CURRENT_APP_VERSION,
+            "percent": 0,
+            "downloaded_mb": 0.0,
+            "total_mb": 0.0,
+            "speed_mbps": 0.0,
+            "target_file": None,
+            "error": None
+        }
+
+    thread = threading.Thread(target=run_update_download_worker, args=(url, req.version), daemon=True)
+    thread.start()
+    return {"status": "started", "asset_url": url}
+
+@app.get("/api/system/update/download-status")
+def get_update_download_status():
+    with update_download_lock:
+        return dict(update_download_state)
+
+@app.post("/api/system/update/install")
+def install_and_restart_update():
+    with update_download_lock:
+        target = update_download_state.get("target_file")
+        status = update_download_state.get("status")
+
+    if not target or status != "completed" or not os.path.exists(target):
+        raise HTTPException(status_code=400, detail="Actualizarea nu a fost descărcată complet încă.")
+
+    try:
+        if os.name == 'nt':
+            os.startfile(target)
+        else:
+            if target.endswith('.deb'):
+                subprocess.Popen(['xdg-open', target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif target.endswith('.AppImage'):
+                subprocess.Popen([target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            else:
+                subprocess.Popen(['xdg-open', target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"status": "launched", "file": target, "message": "Programul de instalare a fost lansat cu succes."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Eroare la lansarea instalatorului: {str(e)}")
 
 
 @app.get("/api/settings")

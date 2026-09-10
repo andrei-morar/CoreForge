@@ -232,3 +232,16 @@ def test_shell_scripts_and_config_integrity():
     assert "next" in dash_data["dependencies"]
     assert "react" in dash_data["dependencies"]
     assert "@monaco-editor/react" in dash_data["dependencies"]
+
+
+def test_system_updater_endpoints(client):
+    # 1. Check download status endpoint
+    status_res = client.get("/api/system/update/download-status")
+    assert status_res.status_code == 200
+    data = status_res.json()
+    assert "status" in data
+    assert "percent" in data
+
+    # 2. Attempt install when not downloaded yet -> returns 400
+    install_res = client.post("/api/system/update/install")
+    assert install_res.status_code == 400

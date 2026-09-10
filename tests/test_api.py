@@ -164,7 +164,7 @@ def test_chat_sessions_lifecycle(client):
 def test_history_lifecycle(client):
     # 1. Insert history entry directly via DB
     with main.get_db() as conn:
-        conn.execute("INSERT INTO chat_history (role, content) VALUES (?, ?)", ("QA Bot", "Automated verification test record"))
+        conn.execute("INSERT INTO chat_history (role, content, timestamp) VALUES (?, ?, ?)", ("QA Bot", "Automated verification test record", "2026-09-10 12:00:00"))
         conn.commit()
 
     # 2. Get history

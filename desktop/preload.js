@@ -6,5 +6,6 @@ contextBridge.exposeInMainWorld('nexusDesktop', {
   isDesktop: true,
   checkUpdates: () => ipcRenderer.invoke('check-updates'),
   showNotification: (title, body) => ipcRenderer.invoke('show-notification', { title, body }),
-  minimizeToTray: () => ipcRenderer.invoke('minimize-to-tray')
+  minimizeToTray: () => ipcRenderer.invoke('minimize-to-tray'),
+  applyUpdate: (filePath) => ipcRenderer.invoke('apply-update', { filePath })
 });

@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
+  Sliders, ArrowUpCircle, Bell, Laptop,
   Cpu, Database, MessageSquare, Zap, MemoryStick, Activity,
   Send, Trash2, RefreshCw, CheckCircle2, XCircle, Loader2,
   BrainCircuit, Monitor, Server, HardDrive, ChevronRight, ChevronDown, Download,
@@ -14,6 +15,7 @@ import ReactFlow, { Background, Edge, Node } from 'reactflow';
 import 'reactflow/dist/style.css';
 
 const API = 'http://localhost:8000';
+const CURRENT_APP_VERSION = '2.2.0';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -472,6 +474,32 @@ export default function Dashboard() {
   });
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [settingsSubTab, setSettingsSubTab] = useState<'update' | 'general' | 'ai' | 'sandbox'>('update');
+  const [downloadProgress, setDownloadProgress] = useState<{
+    status: string;
+    percent: number;
+    downloaded_mb: number;
+    total_mb: number;
+    speed_mbps: number;
+    target_file: string | null;
+    error: string | null;
+  }>({
+    status: 'idle',
+    percent: 0,
+    downloaded_mb: 0,
+    total_mb: 0,
+    speed_mbps: 0,
+    target_file: null,
+    error: null
+  });
+  const [isDownloadingUpdate, setIsDownloadingUpdate] = useState(false);
+  const [isApplyingUpdate, setIsApplyingUpdate] = useState(false);
+  const [updateActionMsg, setUpdateActionMsg] = useState<string | null>(null);
+  const [desktopNotifsEnabled, setDesktopNotifsEnabled] = useState(true);
+  const [aiTemperature, setAiTemperature] = useState(0.5);
+  const [sandboxTimeoutSec, setSandboxTimeoutSec] = useState('15');
+  const [activeTheme, setActiveTheme] = useState('cyberpunk');
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(true);
 
   // ── 7 Advanced Features State ──
   const [editorMode, setEditorMode] = useState<'code' | 'preview'>('code');
@@ -771,6 +799,69 @@ export default function Dashboard() {
   useEffect(() => {
     if (tab === 'tokens') fetchTokenAnalytics();
   }, [tab, fetchTokenAnalytics]);
+
+  const handleStartUpdateDownload = async () => {
+    if (!updateInfo) return;
+    setIsDownloadingUpdate(true);
+    setUpdateActionMsg('Se inițiază descărcarea pachetului...');
+    try {
+      const res = await fetch(`${API}/api/system/update/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ version: updateInfo.latest_version })
+      });
+      if (res.ok) {
+        const pollTimer = setInterval(async () => {
+          try {
+            const sRes = await fetch(`${API}/api/system/update/download-status`);
+            if (sRes.ok) {
+              const statusData = await sRes.json();
+              setDownloadProgress(statusData);
+              if (statusData.status === 'completed') {
+                clearInterval(pollTimer);
+                setIsDownloadingUpdate(false);
+                setUpdateActionMsg('Pachet descărcat cu succes! Gata de instalare.');
+              } else if (statusData.status === 'error') {
+                clearInterval(pollTimer);
+                setIsDownloadingUpdate(false);
+                setUpdateActionMsg(`Eroare la descărcare: ${statusData.error}`);
+              }
+            }
+          } catch {
+            clearInterval(pollTimer);
+            setIsDownloadingUpdate(false);
+          }
+        }, 500);
+      } else {
+        setIsDownloadingUpdate(false);
+        setUpdateActionMsg('Nu s-a putut porni descărcarea.');
+      }
+    } catch (e: any) {
+      setIsDownloadingUpdate(false);
+      setUpdateActionMsg(`Eroare: ${e?.message || 'Eroare de conexiune'}`);
+    }
+  };
+
+  const handleApplyUpdate = async () => {
+    setIsApplyingUpdate(true);
+    setUpdateActionMsg('Se lansează programul de instalare...');
+    try {
+      const res = await fetch(`${API}/api/system/update/install`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        if (typeof window !== 'undefined' && (window as any).nexusDesktop?.applyUpdate && downloadProgress.target_file) {
+          (window as any).nexusDesktop.applyUpdate(downloadProgress.target_file);
+        }
+        setUpdateActionMsg('Instalatorul a fost lansat cu succes! Aplicația se va reporni.');
+      } else {
+        setUpdateActionMsg(`Eroare: ${data.detail || 'Nu s-a putut lansa instalatorul'}`);
+        setIsApplyingUpdate(false);
+      }
+    } catch (e: any) {
+      setUpdateActionMsg(`Eroare: ${e?.message || 'Eroare sistem'}`);
+      setIsApplyingUpdate(false);
+    }
+  };
 
   const handleClearTokens = async () => {
     if (!confirm('Ești sigur că vrei să resetezi toate statisticile locale de tokeni?')) return;
@@ -1283,9 +1374,10 @@ export default function Dashboard() {
     { id: 'direct', label: 'Direct Chat', icon: MessageCircle },
     { id: 'ide', label: 'Code Editor', icon: Code2 },
     { id: 'tokens', label: 'Token Analytics', icon: BarChart3 },
-    { id: 'agents', label: 'Agent Hub', icon: Settings },
+    { id: 'agents', label: 'Agent Hub', icon: Layers },
     { id: 'dashboard', label: 'Live Telemetry', icon: Cpu },
     { id: 'database', label: 'Memory Archive', icon: Database },
+    { id: 'settings', label: 'Settings & Updates', icon: Sliders },
   ];
 
   // ── Local Chat Function with SSE Real-Time Streaming ──
@@ -3649,6 +3741,459 @@ export default function Dashboard() {
                       )}
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ TAB: SETTINGS & UPDATES (iOS / macOS Inspired) ═══ */}
+          {tab === 'settings' && (
+            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up pb-10">
+              {/* Header Bar */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel rounded-2xl p-6 border border-slate-800">
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+                    <Sliders className="h-6 w-6 text-cyan-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                      Panou Configurare & Setări
+                      <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                        v{CURRENT_APP_VERSION}
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400">
+                      Personalizează mediul de lucru, parametrii AI și gestionează actualizările sistemului
+                    </p>
+                  </div>
+                </div>
+
+                {/* Sub-tabs Navigation */}
+                <div className="flex bg-[#05070B] p-1 rounded-xl border border-slate-800/80 gap-1 self-start sm:self-auto overflow-x-auto">
+                  <button
+                    onClick={() => setSettingsSubTab('update')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'update'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowUpCircle className="h-3.5 w-3.5" />
+                    Actualizare Software
+                  </button>
+                  <button
+                    onClick={() => setSettingsSubTab('general')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'general'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Sliders className="h-3.5 w-3.5" />
+                    General & Rețea
+                  </button>
+                  <button
+                    onClick={() => setSettingsSubTab('ai')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'ai'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <BrainCircuit className="h-3.5 w-3.5" />
+                    Inteligență AI & Modele
+                  </button>
+                  <button
+                    onClick={() => setSettingsSubTab('sandbox')}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+                      settingsSubTab === 'sandbox'
+                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Shield className="h-3.5 w-3.5" />
+                    Sandbox & Securitate
+                  </button>
+                </div>
+              </div>
+
+              {/* ════ SUB-TAB 1: ACTUALIZARE SOFTWARE (Stil iPhone / iOS) ════ */}
+              {settingsSubTab === 'update' && (
+                <div className="space-y-6">
+                  {/* Central Apple-Style Update Showcase Card */}
+                  <div className="glass-panel-elevated rounded-3xl p-8 border border-slate-800 text-center relative overflow-hidden">
+                    {/* Background Radial Glow */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+
+                    {/* App Icon Container */}
+                    <div className="relative inline-block mb-4">
+                      <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-[#0B0F17] via-[#131B2A] to-[#1E293B] border border-cyan-500/30 flex items-center justify-center shadow-2xl shadow-cyan-500/20 mx-auto">
+                        <Zap className="h-12 w-12 text-cyan-400 drop-shadow-[0_0_12px_rgba(6,182,212,0.6)]" />
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-[10px] font-mono text-slate-300 font-bold">
+                        v{CURRENT_APP_VERSION}
+                      </div>
+                    </div>
+
+                    <h3 className="text-2xl font-bold text-white tracking-tight mb-1">
+                      CoreForge 2026
+                    </h3>
+                    <p className="text-xs text-slate-400 mb-6 font-mono">
+                      Build Oficial • 100% Local Multi-Agent Orchestrator
+                    </p>
+
+                    {/* Status Display */}
+                    {updateInfo?.update_available ? (
+                      /* Actualizare Nouă Disponibilă (iOS Style) */
+                      <div className="max-w-xl mx-auto space-y-5 text-left bg-slate-900/80 border border-amber-500/30 rounded-2xl p-6 shadow-xl">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <Sparkles className="h-5 w-5 text-amber-400 animate-pulse" />
+                            <div>
+                              <h4 className="text-sm font-semibold text-white">
+                                CoreForge v{updateInfo.latest_version}
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                {updateInfo.release_name || 'Actualizare nouă de sistem'}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[11px] font-semibold">
+                            Disponibil acum
+                          </span>
+                        </div>
+
+                        {/* Release Notes Preview */}
+                        {updateInfo.release_notes && (
+                          <div className="bg-[#05070B] rounded-xl p-4 border border-slate-800 text-xs text-slate-300 max-h-48 overflow-y-auto leading-relaxed whitespace-pre-wrap font-sans">
+                            {updateInfo.release_notes}
+                          </div>
+                        )}
+
+                        {/* Download Progress Bar (When Downloading) */}
+                        {downloadProgress.status === 'downloading' && (
+                          <div className="space-y-2 bg-[#05070B] p-4 rounded-xl border border-cyan-500/30">
+                            <div className="flex justify-between text-xs font-mono">
+                              <span className="text-cyan-400 font-semibold flex items-center gap-1.5">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Se descarcă pachetul...
+                              </span>
+                              <span className="text-white font-bold">{downloadProgress.percent}%</span>
+                            </div>
+                            <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5">
+                              <div
+                                className="h-full bg-gradient-to-r from-cyan-500 via-indigo-500 to-emerald-400 rounded-full transition-all duration-300 shadow-lg shadow-cyan-500/50"
+                                style={{ width: `${downloadProgress.percent}%` }}
+                              />
+                            </div>
+                            <div className="flex justify-between text-[11px] text-slate-400">
+                              <span>{downloadProgress.downloaded_mb} MB / {downloadProgress.total_mb} MB</span>
+                              <span className="text-cyan-300 font-mono">{downloadProgress.speed_mbps} MB/s</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Status / Error feedback */}
+                        {updateActionMsg && (
+                          <p className="text-xs text-center text-cyan-300 font-medium">
+                            {updateActionMsg}
+                          </p>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                          {downloadProgress.status !== 'completed' ? (
+                            <button
+                              onClick={handleStartUpdateDownload}
+                              disabled={isDownloadingUpdate}
+                              className="flex-1 py-3 px-4 bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-black font-semibold rounded-xl text-xs transition shadow-lg shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                            >
+                              {isDownloadingUpdate ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin text-black" />
+                                  Se descarcă...
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="h-4 w-4 text-black" />
+                                  Descarcă și Instalează (1-Click)
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={handleApplyUpdate}
+                              disabled={isApplyingUpdate}
+                              className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold rounded-xl text-xs transition shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 animate-pulse"
+                            >
+                              <CheckCircle2 className="h-4 w-4 text-black" />
+                              {isApplyingUpdate ? 'Se lansează...' : 'Instalează și Repornește Acum'}
+                            </button>
+                          )}
+
+                          <a
+                            href={updateInfo.releases_url || 'https://github.com/andrei-morar/CoreForge/releases'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-xs border border-slate-700 transition flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>GitHub Releases</span>
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Sistem la zi (Apple Green Check) */
+                      <div className="max-w-md mx-auto space-y-4">
+                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          CoreForge este actualizat la zi
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Versiunea v{CURRENT_APP_VERSION} este cea mai nouă versiune oficială disponibilă pe canalul stabil.
+                        </p>
+                        <div className="pt-2">
+                          <button
+                            onClick={handleCheckUpdates}
+                            disabled={isCheckingUpdate}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 text-xs font-medium border border-slate-700 transition cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`h-3.5 w-3.5 ${isCheckingUpdate ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
+                            {isCheckingUpdate ? 'Se verifică GitHub...' : 'Caută Actualizări'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* iOS Settings Options Cards */}
+                    <div className="mt-8 pt-6 border-t border-slate-800/80 max-w-xl mx-auto text-left space-y-3">
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                        <div>
+                          <div className="text-xs font-semibold text-white">Actualizări Automate</div>
+                          <div className="text-[11px] text-slate-500">Verifică periodic versiuni noi în fundal</div>
+                        </div>
+                        <button
+                          onClick={() => setAutoCheckUpdates(!autoCheckUpdates)}
+                          className={`w-11 h-6 rounded-full p-1 transition cursor-pointer flex items-center ${
+                            autoCheckUpdates ? 'bg-cyan-500 justify-end' : 'bg-slate-800 justify-start'
+                          }`}
+                        >
+                          <div className="w-4 h-4 rounded-full bg-white shadow-md" />
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
+                        <div>
+                          <div className="text-xs font-semibold text-white">Canal de Lansare</div>
+                          <div className="text-[11px] text-slate-500">Alege tipul de build-uri descărcate</div>
+                        </div>
+                        <select className="bg-[#05070B] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-cyan-400 font-medium focus:outline-none">
+                          <option value="stable">Stabil (Recomandat)</option>
+                          <option value="beta">Beta / Canary</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ════ SUB-TAB 2: GENERAL & REȚEA ════ */}
+              {settingsSubTab === 'general' && (
+                <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Sliders className="h-4 w-4 text-cyan-400" />
+                    Preferințe Generale & Interfață
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Temă Vizuală */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                      <div className="text-xs font-semibold text-slate-200">Temă Grafică Aplicație</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'cyberpunk', name: 'Cyberpunk Neon' },
+                          { id: 'slate', name: 'Obsidian Slate' },
+                          { id: 'midnight', name: 'Midnight Blue' }
+                        ].map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => setActiveTheme(t.id)}
+                            className={`p-2.5 rounded-lg text-xs font-medium border text-center transition cursor-pointer ${
+                              activeTheme === t.id
+                                ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400'
+                                : 'bg-[#05070B] border-slate-800 text-slate-400 hover:text-white'
+                            }`}
+                          >
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Notificări Desktop */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">Notificări Native Desktop</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Alertează când un roi de agenți termină codul
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setDesktopNotifsEnabled(!desktopNotifsEnabled);
+                          notifyUser('CoreForge 2026', 'Notificările native sunt acum active!');
+                        }}
+                        className={`w-11 h-6 rounded-full p-1 transition cursor-pointer flex items-center ${
+                          desktopNotifsEnabled ? 'bg-cyan-500 justify-end' : 'bg-slate-800 justify-start'
+                        }`}
+                      >
+                        <div className="w-4 h-4 rounded-full bg-white shadow-md" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Porturi Rețea */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="text-xs font-semibold text-slate-200">Diagnosticare Porturi & Servicii Active</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                      <div className="p-3 rounded-lg bg-[#05070B] border border-slate-800 flex items-center justify-between">
+                        <span className="text-slate-400">FastAPI Backend</span>
+                        <span className="text-cyan-400 font-bold">:8000</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-[#05070B] border border-slate-800 flex items-center justify-between">
+                        <span className="text-slate-400">Web Dashboard</span>
+                        <span className="text-indigo-400 font-bold">:3000</span>
+                      </div>
+                      <div className="p-3 rounded-lg bg-[#05070B] border border-slate-800 flex items-center justify-between">
+                        <span className="text-slate-400">Ollama Local</span>
+                        <span className="text-emerald-400 font-bold">:11434</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ════ SUB-TAB 3: INTELIGENȚĂ AI & MODELE ════ */}
+              {settingsSubTab === 'ai' && (
+                <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BrainCircuit className="h-4 w-4 text-cyan-400" />
+                    Configurare Modele & Parametri de Inferență
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Model Local Implicit */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                      <label className="text-xs font-semibold text-slate-200 block">
+                        Model Local Implicit (Manager Swarm & Direct Chat)
+                      </label>
+                      <select
+                        value={appSettings.local_manager_model}
+                        onChange={(e) => handleUpdateSettings({ local_manager_model: e.target.value })}
+                        className="w-full bg-[#05070B] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                      >
+                        {models.length > 0 ? (
+                          models.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))
+                        ) : (
+                          <option value="qwen2.5-coder:latest">qwen2.5-coder:latest (Recomandat)</option>
+                        )}
+                      </select>
+                      <p className="text-[11px] text-slate-500">
+                        Modelele instalate sunt preluate direct din instanța ta locală de Ollama.
+                      </p>
+                    </div>
+
+                    {/* Temperatură Generare Cod */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs font-semibold text-slate-200">
+                          Temperatură Cod (Creativitate vs Determinism)
+                        </label>
+                        <span className="text-xs font-mono text-cyan-400 font-bold px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20">
+                          {aiTemperature.toFixed(2)}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.0"
+                        max="1.0"
+                        step="0.05"
+                        value={aiTemperature}
+                        onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
+                        className="w-full accent-cyan-400 cursor-pointer"
+                      />
+                      <div className="flex justify-between text-[10px] text-slate-500">
+                        <span>0.0 (Strict & Riguros)</span>
+                        <span>0.5 (Echilibrat)</span>
+                        <span>1.0 (Creativ)</span>
+                      </div>
+                    </div>
+
+                    {/* Comutator Rutare MoE */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">Rutare Ierarhică MoE (Mixture of Experts)</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Deleagă sarcinile atomice către specialiști efemeri în funcție de complexitate
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleUpdateSettings({ moe_routing_enabled: !(appSettings.moe_routing_enabled !== false) })}
+                        className={`w-11 h-6 rounded-full p-1 transition cursor-pointer flex items-center ${
+                          appSettings.moe_routing_enabled ? 'bg-cyan-500 justify-end' : 'bg-slate-800 justify-start'
+                        }`}
+                      >
+                        <div className="w-4 h-4 rounded-full bg-white shadow-md" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ════ SUB-TAB 4: SANDBOX & SECURITATE ════ */}
+              {settingsSubTab === 'sandbox' && (
+                <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
+                  <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-cyan-400" />
+                    Izolare Docker & Politici de Securitate
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Timeout Containere */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+                      <label className="text-xs font-semibold text-slate-200 block">
+                        Timp Maxim de Așteptare Inițializare Sandbox (secunde)
+                      </label>
+                      <select
+                        value={sandboxTimeoutSec}
+                        onChange={(e) => setSandboxTimeoutSec(e.target.value)}
+                        className="w-full bg-[#05070B] border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50"
+                      >
+                        <option value="10">10 secunde (Rapid)</option>
+                        <option value="15">15 secunde (Recomandat)</option>
+                        <option value="30">30 secunde (Aplicații mari)</option>
+                        <option value="60">60 secunde (Build complex)</option>
+                      </select>
+                      <p className="text-[11px] text-slate-500">
+                        Dacă aplicația lansată este un server web continuu, CoreForge îl va lăsa să ruleze în fundal pentru Live Preview.
+                      </p>
+                    </div>
+
+                    {/* Politică Auto-Fix */}
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-slate-200">Auto-Fix Inteligent Activ</div>
+                        <div className="text-[11px] text-slate-500 mt-1">
+                          Corectează automat fișierele dacă containerul Docker detectează erori de sintaxă sau dependențe
+                        </div>
+                      </div>
+                      <div className="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+                        Activat
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
