@@ -933,6 +933,46 @@ def delete_project_file(project_name: str, req: FileDeleteRequest):
     return {"status": "deleted"}
 
 
+@app.get("/api/projects/{project_name}/export-zip")
+def export_project_zip(project_name: str):
+    """Export project files as a downloadable zip archive."""
+    project_dir = os.path.join(GENERATIONS_DIR, project_name)
+    if not os.path.exists(project_dir) or not os.path.isdir(project_dir):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    
+    zip_base = os.path.join(GENERATIONS_DIR, project_name)
+    archive_path = shutil.make_archive(zip_base, 'zip', project_dir)
+    safe_filename = f"{re.sub(r'[^a-zA-Z0-9_-]', '_', project_name)}.zip"
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename=safe_filename
+    )
+
+
+@app.post("/api/projects/{project_name}/open-vscode")
+def open_in_vscode(project_name: str):
+    """Open project folder in VS Code or system file explorer."""
+    project_dir = os.path.join(GENERATIONS_DIR, project_name)
+    if not os.path.exists(project_dir) or not os.path.isdir(project_dir):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    
+    try:
+        if shutil.which("code"):
+            subprocess.Popen(["code", project_dir])
+            return {"status": "success", "launcher": "vscode", "path": project_dir}
+        elif shutil.which("xdg-open"):
+            subprocess.Popen(["xdg-open", project_dir])
+            return {"status": "success", "launcher": "file_explorer", "path": project_dir}
+        elif os.name == "nt":
+            os.startfile(project_dir)
+            return {"status": "success", "launcher": "explorer", "path": project_dir}
+        else:
+            return {"status": "partial", "message": f"Folder ready at {project_dir}", "path": project_dir}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Cannot open editor: {str(e)}")
+
+
 # ─── Docker Sandbox ──────────────────────────────────────────────────────────
 
 try:

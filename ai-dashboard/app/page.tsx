@@ -1024,6 +1024,54 @@ export default function Dashboard() {
     }
   }, [activeProject, activeFile, files]);
 
+
+  // ── Project Export & VS Code Launcher ──
+  const [isExportingZip, setIsExportingZip] = useState(false);
+  const [isOpeningVsCode, setIsOpeningVsCode] = useState(false);
+  const [vsCodeFeedback, setVsCodeFeedback] = useState<string | null>(null);
+
+  const handleExportZip = async () => {
+    if (!activeProject || isExportingZip) return;
+    setIsExportingZip(true);
+    try {
+      const res = await fetch(`${API}/api/projects/${encodeURIComponent(activeProject)}/export-zip`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${activeProject}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      console.error('Export zip failed', e);
+    } finally {
+      setIsExportingZip(false);
+    }
+  };
+
+  const handleOpenVsCode = async () => {
+    if (!activeProject || isOpeningVsCode) return;
+    setIsOpeningVsCode(true);
+    try {
+      const res = await fetch(`${API}/api/projects/${encodeURIComponent(activeProject)}/open-vscode`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVsCodeFeedback(data.launcher === 'vscode' ? 'Deschis în VS Code' : 'Deschis în Explorer');
+        setTimeout(() => setVsCodeFeedback(null), 3000);
+      }
+    } catch (e) {
+      console.error('Open VS Code failed', e);
+    } finally {
+      setIsOpeningVsCode(false);
+    }
+  };
+
   // Ctrl+S / Cmd+S Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1671,6 +1719,29 @@ export default function Dashboard() {
                 >
                   {isSandboxRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                   <span>Run Sandbox</span>
+                </button>
+
+                
+                {/* Export ZIP */}
+                <button
+                  onClick={handleExportZip}
+                  disabled={!activeProject || isExportingZip}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600 hover:text-white transition text-xs font-medium border border-indigo-500/30 disabled:opacity-50 cursor-pointer shadow-sm"
+                  title="Descarcă întregul proiect ca arhivă .ZIP"
+                >
+                  {isExportingZip ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  <span>Export .ZIP</span>
+                </button>
+
+                {/* Open in VS Code */}
+                <button
+                  onClick={handleOpenVsCode}
+                  disabled={!activeProject || isOpeningVsCode}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600/20 text-sky-300 hover:bg-sky-600 hover:text-white transition text-xs font-medium border border-sky-500/30 disabled:opacity-50 cursor-pointer shadow-sm"
+                  title="Deschide folderul proiectului în Visual Studio Code"
+                >
+                  {isOpeningVsCode ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Code2 className="h-3.5 w-3.5" />}
+                  <span>{vsCodeFeedback || 'VS Code'}</span>
                 </button>
 
                 {/* Live Preview Mode Toggle */}

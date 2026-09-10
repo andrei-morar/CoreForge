@@ -399,3 +399,24 @@ def test_sandbox_auto_fix(client):
 
 
 
+
+def test_export_project_zip(client):
+    proj_name = "test-export-app"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, proj_name)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "main.py"), "w") as f:
+        f.write("print('Hello Export')\n")
+
+    res = client.get(f"/api/projects/{proj_name}/export-zip")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/zip"
+    assert len(res.content) > 0
+
+
+def test_open_project_vscode(client):
+    proj_name = "test-export-app"
+    res = client.post(f"/api/projects/{proj_name}/open-vscode")
+    assert res.status_code == 200
+    data = res.json()
+    assert "status" in data
+    assert "path" in data
