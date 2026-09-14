@@ -27,7 +27,7 @@ const API = {
   toString: () => getApiBase(),
   valueOf: () => getApiBase(),
 };
-const CURRENT_APP_VERSION = '2.3.0';
+const CURRENT_APP_VERSION = '2.4.0';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +72,7 @@ interface Job {
   result: string | null;
   error: string | null;
   download_url?: string;
+  project_name?: string;
   active_agent?: string;
   logs?: any[];
   ephemeral_agents?: string[];
@@ -621,6 +622,10 @@ export default function Dashboard() {
   const [previewData, setPreviewData] = useState<any | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
   const [copilotEnabled, setCopilotEnabled] = useState(true);
+  const copilotEnabledRef = useRef(copilotEnabled);
+  useEffect(() => {
+    copilotEnabledRef.current = copilotEnabled;
+  }, [copilotEnabled]);
   const [ragQuery, setRagQuery] = useState('');
   const [ragResults, setRagResults] = useState<any[]>([]);
   const [isRagSearching, setIsRagSearching] = useState(false);
@@ -709,8 +714,15 @@ export default function Dashboard() {
     setIsAutoFixing(true);
     setAutoFixResult(null);
     try {
-      const res = await fetch(`${API}/api/sandbox/auto-fix/${activeProject}`, { method: 'POST' });
+      const res = await fetch(`${API}/api/sandbox/auto-fix/${encodeURIComponent(activeProject)}`, { method: 'POST' });
       const data = await res.json();
+      if (!res.ok) {
+        const errMsg = data.detail || data.message || `Eroare Auto-Fix (${res.status})`;
+        setSandboxLogs(`[Auto-Fix Error]: ${errMsg}`);
+        setIsTerminalOpen(true);
+        addToast('Auto-Fix Error', errMsg, 'error');
+        return;
+      }
       setAutoFixResult(data);
       if (data.modified_files && data.modified_files.length > 0) {
         await reloadProjectFiles(activeProject);
@@ -1418,11 +1430,18 @@ export default function Dashboard() {
     setIsTerminalOpen(true);
     setSandboxLogs(`[Sandbox Engine] Booting isolated container for ${activeProject}...\n[Sandbox Engine] Mounting project filesystem in read/write mode...`);
     try {
-      const res = await fetch(`${API}/api/sandbox/run/${activeProject}`, { method: 'POST' });
+      const res = await fetch(`${API}/api/sandbox/run/${encodeURIComponent(activeProject)}`, { method: 'POST' });
       const data = await res.json();
-      setSandboxLogs(data.logs || "Execution finished with no output.");
-    } catch {
-      setSandboxLogs("Error: Failed to connect to Sandbox execution engine.");
+      if (!res.ok) {
+        const errMsg = data.detail || data.message || `Eroare Sandbox (${res.status})`;
+        setSandboxLogs(`[Sandbox Error]: ${errMsg}\n\nNotă: Pentru a rula Sandbox-ul izolat, asigurați-vă că Docker Engine este instalat și pornit pe sistem.`);
+        addToast('Sandbox Error', errMsg, 'error');
+      } else {
+        setSandboxLogs(data.logs || "Execuția s-a finalizat fără ieșire în consolă.");
+      }
+    } catch (err: any) {
+      setSandboxLogs(`[Sandbox Error]: Nu s-a putut conecta la Sandbox: ${err.message || err}`);
+      addToast('Sandbox Error', 'Eroare de conexiune la Sandbox', 'error');
     }
     setIsSandboxRunning(false);
   };
@@ -1656,7 +1675,9 @@ export default function Dashboard() {
             setSending(false);
             addToast('CoreForge Swarm', 'Sarcina de generare a fost finalizată cu succes!', 'success');
             if (data.download_url) {
-              fetch(`${API}/api/job/${data.job_id}/files`)
+              if (data.project_name) setActiveProject(data.project_name);
+              const fetchUrl = data.project_name ? `${API}/api/projects/${data.project_name}/files` : `${API}/api/job/${data.job_id}/files`;
+              fetch(fetchUrl)
                 .then(r => r.json())
                 .then(fData => {
                   if (fData.files) {
@@ -2484,7 +2505,7 @@ export default function Dashboard() {
                           supportedLanguages.forEach(lang => {
                             monaco.languages.registerInlineCompletionsProvider(lang, {
                               provideInlineCompletions: async (model: any, position: any) => {
-                                if (!copilotEnabled) return { items: [] };
+                                if (!copilotEnabledRef.current) return { items: [] };
 
                                 const textBefore = model.getValueInRange({
                                   startLineNumber: Math.max(1, position.lineNumber - 50),

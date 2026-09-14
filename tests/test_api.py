@@ -310,7 +310,7 @@ def test_check_updates_endpoint(client):
     assert "windows_exe" in data["assets"]
     assert "linux_deb" in data["assets"]
     assert "linux_appimage" in data["assets"]
-    assert data["current_version"] == "2.3.0"
+    assert data["current_version"] == main.CURRENT_APP_VERSION
 
 
 def test_moe_routing_setting(client):
@@ -349,19 +349,23 @@ def test_rag_index_and_search(client):
     with open(os.path.join(proj_dir, "app.py"), "w") as f:
         f.write("def auth_login_user(username, password):\n    \"\"\"Authenticate user credential token.\"\"\"\n    return {'token': 'jwt-secret-token'}\n\ndef process_payment(amount):\n    return True\n")
 
-    # Index project
-    idx_res = client.post(f"/api/rag/index/{proj_name}")
-    assert idx_res.status_code == 200
-    idx_data = idx_res.json()
-    assert idx_data["status"] == "indexed"
-    assert idx_data["total_chunks"] >= 1
+    try:
+        # Index project
+        idx_res = client.post(f"/api/rag/index/{proj_name}")
+        assert idx_res.status_code == 200
+        idx_data = idx_res.json()
+        assert idx_data["status"] == "indexed"
+        assert idx_data["total_chunks"] >= 1
 
-    # Search project
-    search_res = client.get(f"/api/rag/search?project={proj_name}&q=auth_login_user")
-    assert search_res.status_code == 200
-    search_data = search_res.json()
-    assert search_data["count"] >= 1
-    assert any("auth_login_user" in r["snippet"] or r["symbol_name"] == "auth_login_user" for r in search_data["results"])
+        # Search project
+        search_res = client.get(f"/api/rag/search?project={proj_name}&q=auth_login_user")
+        assert search_res.status_code == 200
+        search_data = search_res.json()
+        assert search_data["count"] >= 1
+        assert any("auth_login_user" in r["snippet"] or r["symbol_name"] == "auth_login_user" for r in search_data["results"])
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
 
 
 def test_sandbox_preview_status_and_static(client):
@@ -371,18 +375,22 @@ def test_sandbox_preview_status_and_static(client):
     with open(os.path.join(proj_dir, "index.html"), "w") as f:
         f.write("<!DOCTYPE html><html><body><h1>CoreForge Preview Test</h1></body></html>")
 
-    # Check preview status
-    status_res = client.get(f"/api/sandbox/preview-status/{proj_name}")
-    assert status_res.status_code == 200
-    status_data = status_res.json()
-    assert status_data["is_supported"] is True
-    assert status_data["preview_type"] == "static"
-    assert "preview_url" in status_data
+    try:
+        # Check preview status
+        status_res = client.get(f"/api/sandbox/preview-status/{proj_name}")
+        assert status_res.status_code == 200
+        status_data = status_res.json()
+        assert status_data["is_supported"] is True
+        assert status_data["preview_type"] == "static"
+        assert "preview_url" in status_data
 
-    # Check static serving
-    serve_res = client.get(f"/api/preview/static/{proj_name}/index.html")
-    assert serve_res.status_code == 200
-    assert b"CoreForge Preview Test" in serve_res.content
+        # Check static serving
+        serve_res = client.get(f"/api/preview/static/{proj_name}/index.html")
+        assert serve_res.status_code == 200
+        assert b"CoreForge Preview Test" in serve_res.content
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
 
 
 def test_sandbox_auto_fix(client):
@@ -392,10 +400,14 @@ def test_sandbox_auto_fix(client):
     with open(os.path.join(proj_dir, "app.py"), "w") as f:
         f.write("def healthy_function():\n    return 42\n")
 
-    res = client.post(f"/api/sandbox/auto-fix/{proj_name}")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["status"] in ("already_passing", "fixed", "partially_fixed")
+    try:
+        res = client.post(f"/api/sandbox/auto-fix/{proj_name}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] in ("already_passing", "fixed", "partially_fixed")
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
 
 
 
@@ -407,19 +419,32 @@ def test_export_project_zip(client):
     with open(os.path.join(proj_dir, "main.py"), "w") as f:
         f.write("print('Hello Export')\n")
 
-    res = client.get(f"/api/projects/{proj_name}/export-zip")
-    assert res.status_code == 200
-    assert res.headers["content-type"] == "application/zip"
-    assert len(res.content) > 0
+    try:
+        res = client.get(f"/api/projects/{proj_name}/export-zip")
+        assert res.status_code == 200
+        assert res.headers["content-type"] == "application/zip"
+        assert len(res.content) > 0
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
+        zip_path = os.path.join(main.GENERATIONS_DIR, f"{proj_name}.zip")
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
 
 
 def test_open_project_vscode(client):
     proj_name = "test-export-app"
-    res = client.post(f"/api/projects/{proj_name}/open-vscode")
-    assert res.status_code == 200
-    data = res.json()
-    assert "status" in data
-    assert "path" in data
+    proj_dir = os.path.join(main.GENERATIONS_DIR, proj_name)
+    os.makedirs(proj_dir, exist_ok=True)
+    try:
+        res = client.post(f"/api/projects/{proj_name}/open-vscode")
+        assert res.status_code == 200
+        data = res.json()
+        assert "status" in data
+        assert "path" in data
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
 
 def test_agent_templates_lifecycle(client):
     res = client.get("/api/agents/templates")
@@ -485,3 +510,171 @@ def test_mobile_connect_endpoint(client):
     assert "instructions" in data
     assert "ro" in data["instructions"]
     assert "en" in data["instructions"]
+
+
+def test_job_files_endpoint(client):
+    # 1. Nonexistent job -> 404
+    res_404 = client.get("/api/job/nonexistent-job-id-9999/files")
+    assert res_404.status_code == 404
+
+    # 2. Existing job with test project
+    fake_job_id = "test-job-files-123"
+    test_proj = "test-job-proj"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, test_proj)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "test.py"), "w") as f:
+        f.write("print('hello')")
+
+    with main.jobs_lock:
+        main.jobs[fake_job_id] = {
+            "status": "completed",
+            "project_name": test_proj
+        }
+
+    try:
+        res = client.get(f"/api/job/{fake_job_id}/files")
+        assert res.status_code == 200
+        data = res.json()
+        assert "files" in data
+        assert "test.py" in data["files"]
+        assert data["files"]["test.py"] == "print('hello')"
+    finally:
+        with main.jobs_lock:
+            main.jobs.pop(fake_job_id, None)
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
+
+
+def test_path_sanitization_in_swarm():
+    test_dir = os.path.abspath("/tmp/coreforge_test_proj")
+    
+    # 1. Absolute path with leading slash
+    p1 = main.sanitize_project_path(test_dir, "/app.py")
+    assert p1 == os.path.join(test_dir, "app.py")
+    assert p1.startswith(test_dir)
+
+    # 2. Path traversal with ..
+    p2 = main.sanitize_project_path(test_dir, "../../etc/passwd")
+    assert p2 == os.path.join(test_dir, "etc/passwd")
+    assert p2.startswith(test_dir)
+
+    # 3. Windows-style leading backslash
+    p3 = main.sanitize_project_path(test_dir, "\\server.py")
+    assert p3 == os.path.join(test_dir, "server.py")
+    assert p3.startswith(test_dir)
+
+    # 4. Valid nested path
+    p4 = main.sanitize_project_path(test_dir, "src/components/Button.tsx")
+    assert p4 == os.path.join(test_dir, "src/components/Button.tsx")
+    assert p4.startswith(test_dir)
+
+
+def test_gemini_model_config():
+    assert main.GEMINI_MODEL in ["gemini/gemini-2.0-flash", "gemini/gemini-1.5-flash"]
+    assert "3.6" not in main.GEMINI_MODEL
+
+
+def test_model_tag_installed_accuracy(client):
+    res = client.get("/api/system/specs")
+    assert res.status_code == 200
+    models = {m["id"]: m for m in res.json()["models"]}
+    
+    # qwen2.5-coder:latest should be installed
+    if "qwen2.5-coder:latest" in models and models["qwen2.5-coder:latest"]["is_installed"]:
+        # qwen2.5-coder:14b must NOT be marked installed if only 7B latest is present
+        assert not models["qwen2.5-coder:14b"]["is_installed"]
+
+
+def test_token_analytics_clear_stays_zero(client):
+    # Clear tokens
+    res_clear = client.post("/api/tokens/clear")
+    assert res_clear.status_code == 200
+    assert res_clear.json()["status"] == "cleared"
+
+    # Verify analytics returns 0 tokens and doesn't re-seed
+    res_analytics = client.get("/api/tokens/analytics")
+    assert res_analytics.status_code == 200
+    data = res_analytics.json()
+    assert data["summary"]["total_tokens"] == 0
+    assert data["summary"]["total_requests"] == 0
+
+
+def test_excluded_directories(client):
+    test_proj = "test-exclusion-proj"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, test_proj)
+    os.makedirs(os.path.join(proj_dir, "node_modules", "package"), exist_ok=True)
+    os.makedirs(os.path.join(proj_dir, ".git"), exist_ok=True)
+
+    with open(os.path.join(proj_dir, "index.js"), "w") as f:
+        f.write("console.log('root');")
+    with open(os.path.join(proj_dir, "node_modules", "package", "heavy.js"), "w") as f:
+        f.write("console.log('heavy');")
+    with open(os.path.join(proj_dir, ".git", "config"), "w") as f:
+        f.write("[core]")
+
+    try:
+        # 1. Check get_project_files excludes node_modules and .git
+        res_files = client.get(f"/api/projects/{test_proj}/files")
+        assert res_files.status_code == 200
+        files = res_files.json()["files"]
+        assert "index.js" in files
+        assert not any("node_modules" in k for k in files)
+        assert not any(".git" in k for k in files)
+
+        # 2. Check get_project_tree excludes node_modules and .git
+        res_tree = client.get(f"/api/projects/{test_proj}/tree")
+        assert res_tree.status_code == 200
+        tree = res_tree.json()["tree"]
+        names = [entry["name"] for entry in tree]
+        assert "index.js" in names
+        assert "node_modules" not in names
+        assert ".git" not in names
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
+
+
+def test_sandbox_stop_and_preview_port(client):
+    test_proj = "test-node-preview-proj"
+    proj_dir = os.path.join(main.GENERATIONS_DIR, test_proj)
+    os.makedirs(proj_dir, exist_ok=True)
+    with open(os.path.join(proj_dir, "package.json"), "w") as f:
+        f.write('{"name": "test-node"}')
+
+    try:
+        # 1. Preview status fallback should be 5173, not 3000
+        res = client.get(f"/api/sandbox/preview-status/{test_proj}")
+        assert res.status_code == 200
+        data = res.json()
+        assert "5173" in data["preview_url"]
+        assert "3000" not in data["preview_url"]
+
+        # 2. Stop container endpoint returns gracefully
+        res_stop = client.post(f"/api/sandbox/stop/{test_proj}")
+        assert res_stop.status_code == 200
+        assert "status" in res_stop.json()
+    finally:
+        import shutil
+        shutil.rmtree(proj_dir, ignore_errors=True)
+
+
+def test_sqlite_wal_mode():
+    with main.get_db() as conn:
+        row = conn.execute("PRAGMA journal_mode").fetchone()
+        mode = row[0].lower()
+        assert mode == "wal"
+
+
+def test_semver_check_updates():
+    # Newer version should be True
+    assert main.is_newer_version("2.3.1", "2.3.0") is True
+    assert main.is_newer_version("v2.4.0", "2.3.0") is True
+    assert main.is_newer_version("3.0.0", "2.3.0") is True
+
+    # Same version should be False
+    assert main.is_newer_version("2.3.0", "2.3.0") is False
+    assert main.is_newer_version("v2.3.0", "2.3.0") is False
+
+    # Older version should be False
+    assert main.is_newer_version("2.2.9", "2.3.0") is False
+    assert main.is_newer_version("1.9.5", "2.3.0") is False

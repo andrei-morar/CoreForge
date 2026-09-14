@@ -10,17 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pciutils \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt* ./
-RUN pip install --no-cache-dir \
-    fastapi \
-    uvicorn \
-    pydantic \
-    psutil \
-    docker \
-    crewai \
-    crewai-tools \
-    langchain-google-genai \
-    requests
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 

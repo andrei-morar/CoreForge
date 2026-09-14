@@ -54,7 +54,7 @@ except ImportError:
 app = FastAPI(
     title="CoreForge 2026",
     description="Hierarchical AI Agent Orchestration Platform",
-    version="2.3.0",
+    version="2.4.0",
 )
 
 # ─── Load Environment Variables ──────────────────────────────────────────────
@@ -208,10 +208,12 @@ def record_token_usage(source: str, session_or_job_id: str, model: str, prompt_t
 
 @contextmanager
 def get_db():
-    """Yield a thread-safe SQLite connection with foreign keys enabled."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    """Yield a thread-safe SQLite connection with WAL mode, busy timeout, and foreign keys enabled."""
+    conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA synchronous = NORMAL")
     try:
         yield conn
     finally:
@@ -231,7 +233,7 @@ def save_message(role: str, content: str) -> None:
 
 # ─── LLM Setup & Settings ───────────────────────────────────────────────────
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-3.6-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini/gemini-2.0-flash")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "ollama/llama3")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
@@ -507,6 +509,18 @@ def build_crew(prompt: str, job_id: str) -> Crew:
 
 # ─── Background Job Runner ───────────────────────────────────────────────────
 
+def sanitize_project_path(project_dir: str, file_path: str) -> str:
+    """Ensure a file path stays strictly within the target project directory."""
+    abs_project_dir = os.path.abspath(project_dir)
+    clean_path = os.path.normpath(file_path.strip().lstrip("/\\"))
+    parts = [p for p in clean_path.split(os.sep) if p != ".." and p != "."]
+    safe_rel_path = os.path.join(*parts) if parts else "file.txt"
+    full_path = os.path.abspath(os.path.join(abs_project_dir, safe_rel_path))
+    if not full_path.startswith(abs_project_dir):
+        return os.path.join(abs_project_dir, os.path.basename(file_path))
+    return full_path
+
+
 def run_crew_background(job_id: str, prompt: str) -> None:
     """Execute a CrewAI crew in a background thread."""
     with jobs_lock:
@@ -568,9 +582,9 @@ def run_crew_background(job_id: str, prompt: str) -> None:
                     content = re.sub(r'^```[a-zA-Z]*\n', '', content)
                     content = re.sub(r'\n```$', '', content)
                     
-                full_path = os.path.join(project_dir, path)
+                full_path = sanitize_project_path(project_dir, path)
                 os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, "w") as f:
+                with open(full_path, "w", encoding="utf-8") as f:
                     f.write(content.strip())
             
             # Create a zip archive for downloading
@@ -806,6 +820,11 @@ def get_projects():
     return {"projects": projects}
 
 
+IGNORED_PROJECT_DIRS = {
+    "node_modules", ".git", "__pycache__", ".next", ".venv", "venv", ".pytest_cache", "dist", "build", ".turbo"
+}
+
+
 @app.get("/api/projects/{project_name}/files")
 def get_project_files(project_name: str):
     """Return all code files in the project directory as a JSON dictionary."""
@@ -814,15 +833,18 @@ def get_project_files(project_name: str):
         raise HTTPException(status_code=404, detail="Project not found.")
         
     files_dict = {}
-    for root, _, files in os.walk(project_dir):
+    for root, dirs, files in os.walk(project_dir):
+        dirs[:] = [d for d in dirs if d not in IGNORED_PROJECT_DIRS and not d.startswith('.')]
         for file in files:
+            if file.startswith('.'):
+                continue
             full_path = os.path.join(root, file)
             rel_path = os.path.relpath(full_path, project_dir)
             try:
                 with open(full_path, "r", encoding="utf-8") as f:
                     files_dict[rel_path] = f.read()
-            except UnicodeDecodeError:
-                pass # skip binary files
+            except (UnicodeDecodeError, PermissionError):
+                pass # skip binary or unreadable files
     return {"files": files_dict}
 
 
@@ -831,6 +853,8 @@ def build_file_tree(dir_path: str, base_path: str = "") -> list[dict[str, Any]]:
     try:
         entries = sorted(os.listdir(dir_path), key=lambda s: (not os.path.isdir(os.path.join(dir_path, s)), s.lower()))
         for entry in entries:
+            if entry in IGNORED_PROJECT_DIRS or (entry.startswith('.') and entry != ".env"):
+                continue
             full_path = os.path.join(dir_path, entry)
             rel_path = os.path.relpath(full_path, base_path) if base_path else entry
             if os.path.isdir(full_path):
@@ -1169,7 +1193,7 @@ Return ONLY the short explanation followed by the <file> tags.
             if content.startswith('```'):
                 content = re.sub(r'^```[a-zA-Z]*\n', '', content)
                 content = re.sub(r'\n```$', '', content)
-            full_p = os.path.join(project_dir, path)
+            full_p = sanitize_project_path(project_dir, path)
             os.makedirs(os.path.dirname(full_p), exist_ok=True)
             with open(full_p, 'w', encoding='utf-8') as fp:
                 fp.write(content.strip())
@@ -1259,7 +1283,7 @@ def get_preview_status(project_name: str):
             "is_supported": True,
             "preview_type": "node",
             "framework": "Node.js / React / Next.js",
-            "preview_url": docker_url or "http://localhost:3000",
+            "preview_url": docker_url or "http://localhost:5173",
             "html_entry": None,
             "all_html": []
         }
@@ -1281,6 +1305,28 @@ def get_preview_status(project_name: str):
             "html_entry": None,
             "all_html": []
         }
+
+
+@app.post("/api/sandbox/stop/{project_name}")
+def stop_sandbox_container(project_name: str):
+    """Stop and remove any running Docker sandbox container associated with the project."""
+    if not docker_client:
+        return {"status": "docker_unavailable", "message": "Docker client is not available."}
+    
+    stopped = 0
+    try:
+        containers = docker_client.containers.list(all=True)
+        for c in containers:
+            if project_name in c.name or any(project_name in str(v) for v in c.attrs.get('Mounts', [])):
+                try:
+                    c.stop(timeout=2)
+                    c.remove(force=True)
+                    stopped += 1
+                except Exception:
+                    pass
+        return {"status": "stopped", "containers_removed": stopped}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error stopping sandbox: {str(e)}")
 
 
 @app.get("/api/preview/static/{project_name}/{file_path:path}")
@@ -1323,6 +1369,25 @@ def get_job_status(job_id: str):
         project_name=job.get("project_name"),
         token_usage=job.get("token_usage")
     )
+
+
+@app.get("/api/job/{job_id}/files")
+def get_job_files(job_id: str):
+    """Retrieve generated files associated with a specific job."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    
+    project_name = job.get("project_name")
+    if not project_name:
+        return {"files": {}}
+    
+    project_dir = os.path.join(GENERATIONS_DIR, project_name)
+    if not os.path.exists(project_dir):
+        return {"files": {}}
+        
+    return get_project_files(project_name)
 
 
 # ─── Model Pull Worker & State ───────────────────────────────────────────────
@@ -1424,12 +1489,19 @@ def get_system_specs():
 
     vram_gb = round(gpu_info["vram_total_mb"] / 1024, 1)
 
-    installed_models = []
+    installed_tags = set()
     try:
         req = urllib.request.Request(f"{OLLAMA_BASE_URL}/api/tags")
         with urllib.request.urlopen(req, timeout=2) as response:
             tags = json.loads(response.read().decode())
-            installed_models = [m["name"].split(":")[0] for m in tags.get("models", [])]
+            for item in tags.get("models", []):
+                t_name = item.get("name", "")
+                if t_name:
+                    installed_tags.add(t_name)
+                    if ":" in t_name:
+                        base, tag_part = t_name.split(":", 1)
+                        if tag_part == "latest":
+                            installed_tags.add(base)
     except Exception:
         pass
 
@@ -1491,8 +1563,12 @@ def get_system_specs():
     ]
 
     for m in catalog:
-        m_base = m["id"].split(":")[0]
-        m["is_installed"] = any(m_base in inst for inst in installed_models)
+        m_id = m["id"]
+        m["is_installed"] = (
+            m_id in installed_tags or
+            (f"{m_id}:latest" in installed_tags) or
+            (m_id.endswith(":latest") and m_id.split(":")[0] in installed_tags)
+        )
         
         if gpu_info["has_gpu"] and vram_gb >= m["min_vram_gb"]:
             m["compatibility_percent"] = 98
@@ -1609,7 +1685,18 @@ def get_mobile_connect():
         }
     }
 
-CURRENT_APP_VERSION = "2.3.0"
+CURRENT_APP_VERSION = "2.4.0"
+
+def is_newer_version(latest_str: str, current_str: str) -> bool:
+    """Safely compare two semantic version strings like '2.3.1' and '2.3.0'."""
+    try:
+        def parse_ver(v: str):
+            clean = re.sub(r'[^0-9.]', '', v.strip().lstrip("v"))
+            return [int(x) for x in clean.split('.') if x.isdigit()]
+        return parse_ver(latest_str) > parse_ver(current_str)
+    except Exception:
+        return False
+
 
 @app.get("/api/system/check-updates")
 def check_for_updates(repo: str = "andrei-morar/CoreForge"):
@@ -1663,7 +1750,7 @@ def check_for_updates(repo: str = "andrei-morar/CoreForge"):
                     elif name.endswith(".appimage"):
                         result["assets"]["linux_appimage"] = download_url
 
-                if tag and tag != CURRENT_APP_VERSION:
+                if tag and is_newer_version(tag, CURRENT_APP_VERSION):
                     result["update_available"] = True
                     result["status"] = "update_available"
                     result["message"] = f"Versiune nouă disponibilă: v{tag}!"
@@ -2737,7 +2824,8 @@ def rag_index_project(project_name: str):
     with get_db() as conn:
         conn.execute("DELETE FROM code_snippets_index WHERE project = ?", (project_name,))
 
-        for root, _, filenames in os.walk(project_dir):
+        for root, dirs, filenames in os.walk(project_dir):
+            dirs[:] = [d for d in dirs if d not in IGNORED_PROJECT_DIRS and not d.startswith('.')]
             for f in filenames:
                 if f.endswith(('.py', '.js', '.jsx', '.ts', '.tsx', '.html', '.css', '.json', '.sql', '.md')):
                     files_indexed += 1
@@ -2850,23 +2938,27 @@ def get_token_analytics():
     """Return aggregated token metrics, breakdown by model and source, timeline, and cost savings."""
     import datetime
     with get_db() as conn:
-        # If table has fewer than 3 entries, populate initial benchmark data points so graphs are rich
-        cnt = conn.execute("SELECT COUNT(*) FROM token_usage").fetchone()[0]
-        if cnt < 3:
-            now = datetime.datetime.now()
-            benchmarks = [
-                ("direct_chat", "1", "qwen2.5-coder:latest", 48, 192, 240, 2400, (now - datetime.timedelta(days=2)).isoformat()),
-                ("agent_command", "job-init-1", "qwen2.5-coder:latest", 450, 1280, 1730, 16500, (now - datetime.timedelta(days=2)).isoformat()),
-                ("direct_chat", "1", "llama3.1:latest", 64, 280, 344, 3800, (now - datetime.timedelta(days=1)).isoformat()),
-                ("agent_command", "job-init-2", "qwen2.5-coder:latest", 580, 1540, 2120, 21000, (now - datetime.timedelta(days=1)).isoformat()),
-                ("direct_chat", "2", "qwen2.5-coder:latest", 110, 360, 470, 4900, (now - datetime.timedelta(hours=4)).isoformat()),
-                ("agent_command", "job-init-3", "llama3.1:latest", 710, 1820, 2530, 25500, (now - datetime.timedelta(hours=2)).isoformat()),
-            ]
-            conn.executemany(
-                "INSERT INTO token_usage (source, session_or_job_id, model, prompt_tokens, completion_tokens, total_tokens, duration_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                benchmarks
-            )
-            conn.commit()
+        # Populate initial benchmark data points only once if not previously cleared
+        row_cleared = conn.execute("SELECT value FROM settings WHERE key = 'tokens_cleared'").fetchone()
+        row_seeded = conn.execute("SELECT value FROM settings WHERE key = 'tokens_seeded'").fetchone()
+        if not row_cleared and not row_seeded:
+            cnt = conn.execute("SELECT COUNT(*) FROM token_usage").fetchone()[0]
+            if cnt == 0:
+                now = datetime.datetime.now()
+                benchmarks = [
+                    ("direct_chat", "1", "qwen2.5-coder:latest", 48, 192, 240, 2400, (now - datetime.timedelta(days=2)).isoformat()),
+                    ("agent_command", "job-init-1", "qwen2.5-coder:latest", 450, 1280, 1730, 16500, (now - datetime.timedelta(days=2)).isoformat()),
+                    ("direct_chat", "1", "llama3.1:latest", 64, 280, 344, 3800, (now - datetime.timedelta(days=1)).isoformat()),
+                    ("agent_command", "job-init-2", "qwen2.5-coder:latest", 580, 1540, 2120, 21000, (now - datetime.timedelta(days=1)).isoformat()),
+                    ("direct_chat", "2", "qwen2.5-coder:latest", 110, 360, 470, 4900, (now - datetime.timedelta(hours=4)).isoformat()),
+                    ("agent_command", "job-init-3", "llama3.1:latest", 710, 1820, 2530, 25500, (now - datetime.timedelta(hours=2)).isoformat()),
+                ]
+                conn.executemany(
+                    "INSERT INTO token_usage (source, session_or_job_id, model, prompt_tokens, completion_tokens, total_tokens, duration_ms, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    benchmarks
+                )
+                conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('tokens_seeded', 'true')")
+                conn.commit()
 
         # Summary KPIs
         summary_row = conn.execute("""
@@ -2978,6 +3070,7 @@ def get_token_analytics():
 def clear_tokens():
     with get_db() as conn:
         conn.execute("DELETE FROM token_usage")
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('tokens_cleared', 'true')")
         conn.commit()
     return {"status": "cleared"}
 
