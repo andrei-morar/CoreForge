@@ -999,15 +999,30 @@ def open_in_vscode(project_name: str):
 
 # ─── Docker Sandbox ──────────────────────────────────────────────────────────
 
-try:
-    docker_client = docker.from_env()
-except Exception:
-    docker_client = None
+docker_client = None
+
+def get_docker_client():
+    global docker_client
+    if docker_client is None:
+        try:
+            docker_client = docker.from_env()
+        except Exception:
+            docker_client = None
+    else:
+        try:
+            docker_client.ping()
+        except Exception:
+            try:
+                docker_client = docker.from_env()
+            except Exception:
+                docker_client = None
+    return docker_client
 
 @app.post("/api/sandbox/run/{project_name}")
 def run_in_sandbox(project_name: str):
-    if not docker_client:
-        raise HTTPException(status_code=500, detail="Docker client is not available on the server.")
+    client = get_docker_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="Docker client is not available on the server. Asigură-te că Docker Engine este instalat și pornit.")
         
     project_dir = os.path.join(GENERATIONS_DIR, project_name)
     if not os.path.exists(project_dir):
@@ -1037,7 +1052,7 @@ def run_in_sandbox(project_name: str):
                 raise HTTPException(status_code=400, detail="Could not determine how to run this project. No Python or JS files found.")
 
     try:
-        container = docker_client.containers.run(
+        container = client.containers.run(
             image,
             command,
             volumes={os.path.abspath(project_dir): {'bind': '/app', 'mode': 'rw'}},
@@ -1114,7 +1129,8 @@ def sandbox_auto_fix(project_name: str):
             return False, "\n".join(syntax_errs)
 
         # If Docker available, run containerized verification
-        if docker_client:
+        client = get_docker_client()
+        if client:
             try:
                 files = os.listdir(project_dir)
                 if "package.json" in files:
@@ -1133,7 +1149,7 @@ def sandbox_auto_fix(project_name: str):
                     else:
                         return True, "No executable script found."
 
-                out = docker_client.containers.run(
+                out = client.containers.run(
                     image,
                     command,
                     volumes={os.path.abspath(project_dir): {'bind': '/app', 'mode': 'rw'}},
@@ -1256,9 +1272,10 @@ def get_preview_status(project_name: str):
         primary_html = html_files[0]
 
     docker_url = None
-    if docker_client:
+    client = get_docker_client()
+    if client:
         try:
-            containers = docker_client.containers.list()
+            containers = client.containers.list()
             for c in containers:
                 if project_name in c.name or any(project_name in str(v) for v in c.attrs.get('Mounts', [])):
                     ports = c.attrs.get('NetworkSettings', {}).get('Ports', {})
@@ -1310,12 +1327,13 @@ def get_preview_status(project_name: str):
 @app.post("/api/sandbox/stop/{project_name}")
 def stop_sandbox_container(project_name: str):
     """Stop and remove any running Docker sandbox container associated with the project."""
-    if not docker_client:
+    client = get_docker_client()
+    if not client:
         return {"status": "docker_unavailable", "message": "Docker client is not available."}
     
     stopped = 0
     try:
-        containers = docker_client.containers.list(all=True)
+        containers = client.containers.list(all=True)
         for c in containers:
             if project_name in c.name or any(project_name in str(v) for v in c.attrs.get('Mounts', [])):
                 try:
