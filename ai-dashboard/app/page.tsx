@@ -4389,8 +4389,8 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              {/* Sub-tabs Navigation (Native iOS Segmented Control Bar) */}
-              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1 bg-[#090D16]/90 backdrop-blur-md rounded-2xl border border-slate-800/80 sticky top-0 z-10 touch-scroll">
+              {/* Sub-tabs Navigation */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar p-1.5 bg-[#0B0F17] rounded-2xl border border-slate-800/80 touch-scroll shadow-lg">
                 {[
                   { id: 'update', icon: ArrowUpCircle, label: lang === 'ro' ? 'Actualizare' : 'Update' },
                   { id: 'general', icon: Sliders, label: lang === 'ro' ? 'General' : 'General' },
@@ -4602,7 +4602,7 @@ export default function Dashboard() {
                             {/* ════ SUB-TAB: CONECTARE IPHONE & IPAD (PWA QR) ════ */}
               {settingsSubTab === 'mobile' && (
                 <div className="space-y-6 animate-fade-in">
-                  <div className="glass-panel-elevated rounded-2xl p-6 border border-slate-800 space-y-6">
+                  <div className="glass-panel-elevated rounded-2xl p-5 sm:p-7 border border-slate-800 space-y-6">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-800/80">
                       <div>
                         <div className="flex items-center gap-2">
@@ -4620,8 +4620,9 @@ export default function Dashboard() {
                         </p>
                       </div>
                       <button
+                        type="button"
                         onClick={fetchMobileConnect}
-                        className="self-start sm:self-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700 cursor-pointer"
+                        className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition border border-slate-700 cursor-pointer active:scale-95 touch-manipulation"
                       >
                         <RefreshCw className="h-3.5 w-3.5" />
                         Re-scan LAN IP
@@ -4629,7 +4630,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* QR Code and Quick Connect Row */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                       {/* Left: QR Display */}
                       <div className="lg:col-span-5 flex flex-col items-center justify-center p-6 bg-slate-900/60 rounded-2xl border border-slate-800/90 text-center">
                         <div className="text-xs font-semibold text-slate-300 mb-4 flex items-center gap-2">
@@ -4638,33 +4639,33 @@ export default function Dashboard() {
                         </div>
 
                         {mobileConnect?.qr_data_url ? (
-                          <div className="p-3 bg-white rounded-2xl shadow-xl shadow-cyan-500/10 border-2 border-cyan-400/40 inline-block transition hover:scale-105 duration-300">
+                          <div className="bg-white p-3 rounded-2xl shadow-xl shadow-cyan-500/10 inline-block">
                             <img
                               src={mobileConnect.qr_data_url}
-                              alt="CoreForge QR Code"
-                              className="w-48 h-48 sm:w-56 sm:h-56 object-contain"
+                              alt="Mobile Connect QR"
+                              className="w-52 h-52 sm:w-56 sm:h-56 rounded-xl block"
                             />
                           </div>
                         ) : (
-                          <div className="w-52 h-52 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col items-center justify-center text-slate-500">
-                            <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mb-2" />
-                            <span className="text-xs font-mono">Generare QR Code...</span>
+                          <div className="w-52 h-52 sm:w-56 sm:h-56 rounded-2xl bg-slate-800/80 flex items-center justify-center text-slate-500 text-xs flex-col gap-2 border border-slate-700/50">
+                            <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+                            <span>Generare cod QR...</span>
                           </div>
                         )}
 
-                        {/* Network Adapter Switcher (Wi-Fi vs LAN vs USB) */}
+                        {/* Multi-Interface Selector */}
                         {mobileConnect?.interfaces && mobileConnect.interfaces.length > 1 && (
-                          <div className="w-full mt-4 space-y-1.5 text-left">
-                            <div className="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                              <span>Adaptor de Rețea Activ:</span>
+                          <div className="w-full mt-4 pt-4 border-t border-slate-800">
+                            <div className="text-[11px] text-slate-400 font-medium text-left mb-2">
+                              Alege placa de rețea (IP):
                             </div>
-                            <div className="flex flex-wrap gap-1.5">
+                            <div className="flex flex-wrap gap-1.5 justify-center">
                               {mobileConnect.interfaces.map(iface => (
                                 <button
                                   key={iface.interface}
                                   type="button"
                                   onClick={() => handleSelectInterface(iface.ip)}
-                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer border ${
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-mono transition flex items-center gap-1 cursor-pointer border active:scale-95 touch-manipulation ${
                                     mobileConnect.lan_ip === iface.ip
                                       ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                                       : 'bg-slate-950/60 text-slate-400 border-slate-800 hover:text-white hover:border-slate-700'
@@ -4689,11 +4690,12 @@ export default function Dashboard() {
                               type="text"
                               readOnly
                               value={mobileConnect?.url || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3000` : 'http://192.168.1.77:3000')}
-                              className="flex-1 bg-transparent text-xs font-mono text-cyan-300 focus:outline-none px-2 select-all"
+                              className="flex-1 min-w-0 bg-transparent text-xs font-mono text-cyan-300 focus:outline-none px-2 select-all"
                             />
                             <button
+                              type="button"
                               onClick={handleCopyMobileUrl}
-                              className="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1 transition cursor-pointer shrink-0"
+                              className="px-3.5 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0 active:scale-95 touch-manipulation"
                             >
                               {isCopiedMobileUrl ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                               <span>{isCopiedMobileUrl ? t.mobile_copied : t.mobile_copy_url}</span>
@@ -4703,13 +4705,14 @@ export default function Dashboard() {
                       </div>
 
                       {/* Right: Step-by-Step Safari PWA Guide */}
-                      <div className="lg:col-span-7 space-y-4">
+                      <div className="lg:col-span-7 space-y-5">
                         <div className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
                           <Share2 className="h-4 w-4 text-indigo-400" />
                           Ghid de Instalare pe iPhone & iPad (Fără App Store)
                         </div>
 
                         <div className="space-y-3">
+                          {/* Step 1 */}
                           <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
                             <div className="h-7 w-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center shrink-0">
                               1
@@ -4720,6 +4723,7 @@ export default function Dashboard() {
                             </div>
                           </div>
 
+                          {/* Step 2 */}
                           <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-slate-900/40 border border-slate-800">
                             <div className="h-7 w-7 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center shrink-0">
                               2
@@ -4730,7 +4734,9 @@ export default function Dashboard() {
                             </div>
                           </div>
 
-                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 font-bold text-xs flex items-center justify-center shrink-0">
+                          {/* Step 3 (Properly formatted) */}
+                          <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20">
+                            <div className="h-7 w-7 rounded-lg bg-indigo-500/20 border border-indigo-500/30 text-indigo-300 font-bold text-xs flex items-center justify-center shrink-0">
                               3
                             </div>
                             <div className="text-xs text-slate-300 leading-relaxed">
@@ -4739,6 +4745,7 @@ export default function Dashboard() {
                             </div>
                           </div>
 
+                          {/* Step 4 */}
                           <div className="flex items-start gap-3.5 p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
                             <div className="h-7 w-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-xs flex items-center justify-center shrink-0">
                               4
@@ -4750,17 +4757,17 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Feature Badges */}
-                        <div className="pt-2 grid grid-cols-3 gap-2 text-center">
-                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                        {/* Feature Badges - inside the right column */}
+                        <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center">
+                          <div className="p-3 rounded-xl bg-[#05070B] border border-slate-800">
                             <div className="text-xs font-semibold text-white">Full Screen</div>
                             <div className="text-[10px] text-slate-500 mt-0.5">Fără bare Safari</div>
                           </div>
-                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                          <div className="p-3 rounded-xl bg-[#05070B] border border-slate-800">
                             <div className="text-xs font-semibold text-white">Bottom Tab Bar</div>
                             <div className="text-[10px] text-slate-500 mt-0.5">Navigare tactilă iOS</div>
                           </div>
-                          <div className="p-2.5 rounded-xl bg-[#05070B] border border-slate-800">
+                          <div className="p-3 rounded-xl bg-[#05070B] border border-slate-800">
                             <div className="text-xs font-semibold text-white">0 Setup / Cablu</div>
                             <div className="text-[10px] text-slate-500 mt-0.5">Direct prin Wi-Fi</div>
                           </div>
@@ -4768,6 +4775,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
+                </div>
               )}
 
               {/* ════ SUB-TAB 2: GENERAL & REȚEA ════ */}
