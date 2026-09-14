@@ -942,16 +942,37 @@ export default function Dashboard() {
     setMobileConnect(prev => prev ? { ...prev, lan_ip: ip, url: newUrl, qr_data_url: newQr } : null);
   };
 
-  const handleCopyMobileUrl = () => {
+  const handleCopyMobileUrl = async () => {
     if (!mobileConnect?.url) return;
-    navigator.clipboard.writeText(mobileConnect.url);
-    setIsCopiedMobileUrl(true);
-    addToast(
-      lang === 'ro' ? 'Link Copiat' : 'Link Copied',
-      mobileConnect.url,
-      'info'
-    );
-    setTimeout(() => setIsCopiedMobileUrl(false), 2000);
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(mobileConnect.url);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = mobileConnect.url;
+        textArea.style.position = "fixed";
+        textArea.style.left = "-999999px";
+        textArea.style.top = "-999999px";
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      }
+      setIsCopiedMobileUrl(true);
+      addToast(
+        lang === 'ro' ? 'Link Copiat' : 'Link Copied',
+        mobileConnect.url,
+        'info'
+      );
+      setTimeout(() => setIsCopiedMobileUrl(false), 2000);
+    } catch {
+      addToast(
+        lang === 'ro' ? 'Eroare Copiere' : 'Copy Error',
+        mobileConnect.url,
+        'warning'
+      );
+    }
   };
 
   const handleDeleteModel = async (modelName: string) => {
@@ -1890,7 +1911,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-[#07090E] text-slate-100 font-sans overflow-hidden">
+    <div className="flex h-full min-h-[100dvh] max-h-[100dvh] w-full bg-[#07090E] text-slate-100 font-sans overflow-hidden">
       {/* ── Sidebar ── */}
       <aside className="hidden md:flex w-64 border-r border-slate-800/80 bg-[#0B0F17]/70 backdrop-blur-xl flex-col shrink-0">
         <div className="p-5">
@@ -1973,34 +1994,36 @@ export default function Dashboard() {
       </aside>
 
       {/* ── Main Area ── */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(6,182,212,0.06),transparent)]">
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(6,182,212,0.06),transparent)]">
         {/* ── Mobile Top Header Bar (< 768px) ── */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-[#0B0F17]/90 backdrop-blur-xl border-b border-slate-800/80 shrink-0 z-30">
+        <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-[#0B0F17]/95 backdrop-blur-xl border-b border-slate-800/90 shrink-0 z-30">
           <div className="flex items-center gap-2.5">
             <div className="h-7 w-7 rounded-lg bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center animate-breathing shrink-0">
               <Zap className="h-4 w-4 text-white" />
             </div>
             <div>
               <span className="font-bold tracking-wider text-xs text-white">COREFORGE</span>
-              <span className="ml-1.5 text-[9px] text-cyan-400 font-mono px-1.5 py-0.5 rounded bg-cyan-950/50 border border-cyan-800/50">v2.3</span>
+              <span className="ml-1.5 text-[9px] text-cyan-400 font-mono px-1.5 py-0.5 rounded bg-cyan-950/50 border border-cyan-800/50 font-semibold">v{CURRENT_APP_VERSION}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Bilingual Switcher */}
+            {/* Bilingual Switcher with responsive touch targets */}
             <div className="flex items-center bg-[#05070B] p-0.5 rounded-lg border border-slate-800">
               <button
+                type="button"
                 onClick={() => switchLanguage('ro')}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition ${
-                  lang === 'ro' ? 'bg-indigo-600 text-white' : 'text-slate-500'
+                className={`min-w-[32px] min-h-[26px] px-2 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer touch-manipulation ${
+                  lang === 'ro' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 RO
               </button>
               <button
+                type="button"
                 onClick={() => switchLanguage('en')}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition ${
-                  lang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-500'
+                className={`min-w-[32px] min-h-[26px] px-2 py-0.5 rounded text-[10px] font-bold transition active:scale-95 cursor-pointer touch-manipulation ${
+                  lang === 'en' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 EN
@@ -2008,8 +2031,8 @@ export default function Dashboard() {
             </div>
 
             {/* Live Status indicator */}
-            <div className="flex items-center gap-1 text-[10px] text-slate-400 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800">
-              <div className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: statusColors[sysStatus] }} />
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-300 px-2.5 py-1 rounded-full bg-slate-900/90 border border-slate-800 font-medium">
+              <div className="h-1.5 w-1.5 rounded-full animate-pulse shrink-0" style={{ background: statusColors[sysStatus] }} />
               <span className="capitalize">{sysStatus}</span>
             </div>
           </div>
@@ -2646,7 +2669,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 pb-24 md:pb-8">
+          <div className="flex-1 min-h-0 overflow-y-auto touch-scroll overscroll-contain p-3.5 sm:p-6 md:p-8 pb-28 md:pb-8">
 
           {/* ═══ TAB: SYSTEM / LOCAL AI & HARDWARE ═══ */}
           {tab === 'system' && (
@@ -4341,102 +4364,66 @@ export default function Dashboard() {
 
           {/* ═══ TAB: SETTINGS & UPDATES (iOS / macOS Inspired) ═══ */}
           {tab === 'settings' && (
-            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in-up pb-10">
+            <div className="max-w-4xl mx-auto space-y-4 animate-fade-in-up pb-12">
               {/* Header Bar */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel rounded-2xl p-6 border border-slate-800">
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10">
-                    <Sliders className="h-6 w-6 text-cyan-400" />
+              <div className="glass-panel rounded-2xl p-4 sm:p-6 border border-slate-800 shadow-xl">
+                <div className="flex items-center gap-3.5">
+                  <div className="h-11 w-11 rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-indigo-500/20 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10 shrink-0">
+                    <Sliders className="h-5 w-5 text-cyan-400" />
                   </div>
-                  <div>
-                    <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-                      Panou Configurare & Setări
-                      <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                        {lang === 'ro' ? 'Panou Configurare & Setări' : 'Configuration & Settings'}
+                      </h2>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-semibold">
                         v{CURRENT_APP_VERSION}
                       </span>
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Personalizează mediul de lucru, parametrii AI și gestionează actualizările sistemului
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                      {lang === 'ro'
+                        ? 'Personalizează mediul de lucru, parametrii AI și gestionează actualizările sistemului'
+                        : 'Customize workspace, AI swarm parameters & system updates'}
                     </p>
                   </div>
                 </div>
+              </div>
 
-                {/* Sub-tabs Navigation */}
-                <div className="flex bg-[#05070B] p-1 rounded-xl border border-slate-800/80 gap-1 self-start sm:self-auto overflow-x-auto">
-                  <button
-                    onClick={() => setSettingsSubTab('update')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'update'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <ArrowUpCircle className="h-3.5 w-3.5" />
-                    Actualizare Software
-                  </button>
-                  <button
-                    onClick={() => setSettingsSubTab('general')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'general'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Sliders className="h-3.5 w-3.5" />
-                    General & Rețea
-                  </button>
-                  <button
-                    onClick={() => setSettingsSubTab('mobile')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'mobile'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Smartphone className="h-3.5 w-3.5" />
-                    {t.settings_sub_mobile}
-                  </button>
-                  <button
-                    onClick={() => setSettingsSubTab('ai')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'ai'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <BrainCircuit className="h-3.5 w-3.5" />
-                    Inteligență AI & Modele
-                  </button>
-                  <button
-                    onClick={() => setSettingsSubTab('models')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'models'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Package className="h-3.5 w-3.5" />
-                    Modele AI
-                  </button>
-                  <button
-                    onClick={() => setSettingsSubTab('sandbox')}
-                    className={`px-3.5 py-2 rounded-lg text-xs font-medium transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-                      settingsSubTab === 'sandbox'
-                        ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    <Shield className="h-3.5 w-3.5" />
-                    Sandbox & Securitate
-                  </button>
-                </div>
+              {/* Sub-tabs Navigation (Native iOS Segmented Control Bar) */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1 px-1 bg-[#090D16]/90 backdrop-blur-md rounded-2xl border border-slate-800/80 sticky top-0 z-10 touch-scroll">
+                {[
+                  { id: 'update', icon: ArrowUpCircle, label: lang === 'ro' ? 'Actualizare' : 'Update' },
+                  { id: 'general', icon: Sliders, label: lang === 'ro' ? 'General' : 'General' },
+                  { id: 'mobile', icon: Smartphone, label: lang === 'ro' ? 'Acces iPhone' : 'Mobile Connect' },
+                  { id: 'ai', icon: BrainCircuit, label: lang === 'ro' ? 'Inteligență AI' : 'AI Engine' },
+                  { id: 'models', icon: Package, label: lang === 'ro' ? 'Modele Ollama' : 'Models' },
+                  { id: 'sandbox', icon: Shield, label: lang === 'ro' ? 'Sandbox' : 'Sandbox' },
+                ].map((st) => {
+                  const isAct = settingsSubTab === st.id;
+                  const IconComp = st.icon;
+                  return (
+                    <button
+                      key={st.id}
+                      type="button"
+                      onClick={() => setSettingsSubTab(st.id as any)}
+                      className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-medium transition-all active:scale-95 cursor-pointer shrink-0 touch-manipulation whitespace-nowrap select-none ${
+                        isAct
+                          ? 'bg-cyan-500 text-black font-semibold shadow-md shadow-cyan-500/20'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <IconComp className="h-3.5 w-3.5" />
+                      <span>{st.label}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* ════ SUB-TAB 1: ACTUALIZARE SOFTWARE (Stil iPhone / iOS) ════ */}
               {settingsSubTab === 'update' && (
                 <div className="space-y-6">
                   {/* Central Apple-Style Update Showcase Card */}
-                  <div className="glass-panel-elevated rounded-3xl p-8 border border-slate-800 text-center relative overflow-hidden">
+                  <div className="glass-panel-elevated rounded-2xl sm:rounded-3xl p-5 sm:p-8 border border-slate-800 text-center relative overflow-hidden">
                     {/* Background Radial Glow */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
 
@@ -4793,31 +4780,9 @@ export default function Dashboard() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Temă Vizuală */}
-                                        {/* Conectare iPhone / iPad shortcut */}
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                          <Smartphone className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">
-                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSettingsSubTab('mobile')}
-                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                      >
-                        <QrCode className="h-3.5 w-3.5" />
-                        <span>Afișează QR Code</span>
-                      </button>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                                                            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                       <div className="text-xs font-semibold text-slate-200">Temă Grafică Aplicație</div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         {[
                           { id: 'cyberpunk', name: 'Cyberpunk Neon' },
                           { id: 'slate', name: 'Obsidian Slate' },
@@ -4861,29 +4826,7 @@ export default function Dashboard() {
                   </div>
 
                   {/* Porturi Rețea */}
-                                      {/* Conectare iPhone / iPad shortcut */}
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                          <Smartphone className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">
-                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSettingsSubTab('mobile')}
-                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                      >
-                        <QrCode className="h-3.5 w-3.5" />
-                        <span>Afișează QR Code</span>
-                      </button>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                                                          <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                     <div className="text-xs font-semibold text-slate-200">Diagnosticare Porturi & Servicii Active</div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
                       <div className="p-3 rounded-lg bg-[#05070B] border border-slate-800 flex items-center justify-between">
@@ -4936,29 +4879,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* Temperatură Generare Cod */}
-                                        {/* Conectare iPhone / iPad shortcut */}
-                    <div className="p-4 rounded-xl bg-gradient-to-r from-cyan-950/30 to-indigo-950/30 border border-cyan-500/20 flex items-center justify-between col-span-1 md:col-span-2">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
-                          <Smartphone className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-white">Conectare iPhone & iPad (Safari PWA)</div>
-                          <div className="text-[11px] text-slate-400 mt-0.5">
-                            Scanează codul QR pentru acces instantaneu de pe telefon sau tabletă prin Wi-Fi.
-                          </div>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSettingsSubTab('mobile')}
-                        className="px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shrink-0"
-                      >
-                        <QrCode className="h-3.5 w-3.5" />
-                        <span>Afișează QR Code</span>
-                      </button>
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                                                            <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                       <div className="flex justify-between items-center">
                         <label className="text-xs font-semibold text-slate-200">
                           Temperatură Cod (Creativitate vs Determinism)
@@ -5104,8 +5025,9 @@ export default function Dashboard() {
                                 </div>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() => setDeleteConfirm(m.name)}
-                                  className="p-2 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer opacity-0 group-hover:opacity-100"
+                                  className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition cursor-pointer opacity-100 sm:opacity-0 sm:group-hover:opacity-100 touch-manipulation"
                                   title="Șterge modelul"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -5399,77 +5321,92 @@ export default function Dashboard() {
           </div>
         )}
             {/* ── Mobile iOS Bottom Tab Bar (< 768px) ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#0B0F17]/95 backdrop-blur-2xl border-t border-slate-800/80 px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] flex items-center justify-around shadow-[0_-10px_25px_rgba(0,0,0,0.5)]">
+      <nav
+        aria-label="Mobile Navigation"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0B0F17]/95 backdrop-blur-2xl border-t border-slate-800/90 px-1.5 pt-1.5 pb-[max(env(safe-area-inset-bottom,0px),10px)] flex items-center justify-around shadow-[0_-10px_30px_rgba(0,0,0,0.8)] pointer-events-auto touch-manipulation select-none"
+      >
         {/* Tab 1: System */}
         <button
+          type="button"
           onClick={() => { setTab('system'); setShowMobileMoreSheet(false); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            tab === 'system' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center gap-1 py-1.5 px-2 min-w-[56px] min-h-[44px] rounded-xl transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
+            tab === 'system' ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <HardDrive className={`h-5 w-5 ${tab === 'system' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
-          <span className="text-[10px] font-medium">{t.nav_system}</span>
+          <span className="text-[10px] font-medium leading-none">{t.nav_system}</span>
         </button>
 
         {/* Tab 2: Direct Chat */}
         <button
+          type="button"
           onClick={() => { setTab('direct'); setShowMobileMoreSheet(false); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            tab === 'direct' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center gap-1 py-1.5 px-2 min-w-[56px] min-h-[44px] rounded-xl transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
+            tab === 'direct' ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <MessageCircle className={`h-5 w-5 ${tab === 'direct' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
-          <span className="text-[10px] font-medium">{t.nav_chat}</span>
+          <span className="text-[10px] font-medium leading-none">{t.nav_chat}</span>
         </button>
 
         {/* Tab 3: Agents */}
         <button
+          type="button"
           onClick={() => { setTab('agents'); setShowMobileMoreSheet(false); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            tab === 'agents' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center gap-1 py-1.5 px-2 min-w-[56px] min-h-[44px] rounded-xl transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
+            tab === 'agents' ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <Layers className={`h-5 w-5 ${tab === 'agents' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
-          <span className="text-[10px] font-medium">{t.nav_agents}</span>
+          <span className="text-[10px] font-medium leading-none">{t.nav_agents}</span>
         </button>
 
         {/* Tab 4: Settings */}
         <button
+          type="button"
           onClick={() => { setTab('settings'); setShowMobileMoreSheet(false); }}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
-            tab === 'settings' ? 'text-cyan-400' : 'text-slate-400 hover:text-slate-200'
+          className={`flex flex-col items-center justify-center gap-1 py-1.5 px-2 min-w-[56px] min-h-[44px] rounded-xl transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
+            tab === 'settings' ? 'text-cyan-400 font-semibold' : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <Sliders className={`h-5 w-5 ${tab === 'settings' ? 'stroke-[2.5px] scale-110 drop-shadow-[0_0_8px_rgba(6,182,212,0.6)]' : 'stroke-[1.75px]'}`} />
-          <span className="text-[10px] font-medium">{t.nav_settings}</span>
+          <span className="text-[10px] font-medium leading-none">{t.nav_settings}</span>
         </button>
 
         {/* Tab 5: More / Meniu */}
         <button
+          type="button"
           onClick={() => setShowMobileMoreSheet(!showMobileMoreSheet)}
-          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center gap-1 py-1.5 px-2 min-w-[56px] min-h-[44px] rounded-xl transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
             showMobileMoreSheet || ['chat', 'ide', 'tokens', 'dashboard', 'database'].includes(tab)
-              ? 'text-cyan-400'
+              ? 'text-cyan-400 font-semibold'
               : 'text-slate-400 hover:text-slate-200'
           }`}
         >
           <MoreHorizontal className={`h-5 w-5 ${showMobileMoreSheet ? 'scale-110 stroke-[2.5px]' : 'stroke-[1.75px]'}`} />
-          <span className="text-[10px] font-medium">{lang === 'ro' ? 'Meniu' : 'More'}</span>
+          <span className="text-[10px] font-medium leading-none">{lang === 'ro' ? 'Meniu' : 'More'}</span>
         </button>
       </nav>
 
       {/* ── Mobile 'More' Drawer / Sheet ── */}
       {showMobileMoreSheet && (
-        <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-[#0D121F] border-t border-slate-700/80 rounded-t-3xl p-5 shadow-2xl space-y-4 pb-[calc(1.5rem+env(safe-area-inset-bottom,0px))]">
+        <div
+          className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/70 backdrop-blur-sm animate-fade-in pointer-events-auto touch-manipulation"
+          onClick={() => setShowMobileMoreSheet(false)}
+        >
+          <div
+            className="bg-[#0D121F] border-t border-slate-700/80 rounded-t-3xl p-5 shadow-2xl space-y-4 pb-[max(env(safe-area-inset-bottom,0px)+1.5rem,2rem)]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <span className="text-sm font-semibold text-white flex items-center gap-2">
                 <Zap className="h-4 w-4 text-cyan-400" />
                 {lang === 'ro' ? 'Navigare Toate Secțiunile' : 'All Sections Navigation'}
               </span>
               <button
+                type="button"
                 onClick={() => setShowMobileMoreSheet(false)}
-                className="p-1 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer"
+                className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white cursor-pointer active:scale-95 touch-manipulation"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -5482,11 +5419,12 @@ export default function Dashboard() {
                 return (
                   <button
                     key={tItem.id}
+                    type="button"
                     onClick={() => {
                       setTab(tItem.id);
                       setShowMobileMoreSheet(false);
                     }}
-                    className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition-all cursor-pointer ${
+                    className={`flex flex-col items-center justify-center p-3 min-h-[64px] rounded-2xl border text-center transition-all active:scale-95 cursor-pointer touch-manipulation select-none ${
                       isSelected
                         ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.15)]'
                         : 'bg-slate-900/80 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'

@@ -16,8 +16,8 @@ export const viewport: Viewport = {
   themeColor: "#080D1A",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  maximumScale: 5,
+  userScalable: true,
   viewportFit: "cover",
 };
 
@@ -52,7 +52,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="CoreForge" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="h-full min-h-[100dvh] flex flex-col overflow-hidden bg-[#07090E] text-slate-100 antialiased selection:bg-cyan-500/30 selection:text-white">{children}</body>
     </html>
   );
 }
