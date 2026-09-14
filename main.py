@@ -1036,8 +1036,48 @@ def run_in_sandbox(project_name: str):
     elif "requirements.txt" in files:
         image = "python:3.10-slim"
         py_files = [f for f in files if f.endswith('.py')]
-        main_py = py_files[0] if py_files else "app.py"
-        command = f'sh -c "pip install -r requirements.txt && python {main_py}"'
+        main_py = None
+        for candidate in ["main.py", "app.py", "server.py", "api.py"]:
+            if candidate in py_files:
+                main_py = candidate
+                break
+        if not main_py:
+            for pf in py_files:
+                p_path = os.path.join(project_dir, pf)
+                try:
+                    with open(p_path, "r", errors="ignore") as f:
+                        c = f.read()
+                        if "FastAPI" in c or "Flask" in c or "app = " in c:
+                            main_py = pf
+                            break
+                except Exception:
+                    pass
+        if not main_py:
+            main_py = py_files[0] if py_files else "app.py"
+
+        # Auto-sanitize requirements.txt to remove python standard library builtins
+        req_file = os.path.join(project_dir, "requirements.txt")
+        if os.path.exists(req_file):
+            with open(req_file, "r") as rf:
+                req_lines = rf.readlines()
+            builtins = {"sqlite3", "json", "os", "sys", "math", "re", "datetime", "random", "time", "shutil", "typing", "chart.js"}
+            cleaned_req = [l for l in req_lines if l.strip().lower() not in builtins]
+            with open(req_file, "w") as rf:
+                rf.writelines(cleaned_req)
+
+        module_name = main_py[:-3] if main_py.endswith(".py") else main_py
+        py_path = os.path.join(project_dir, main_py)
+        py_code = ""
+        if os.path.exists(py_path):
+            with open(py_path, "r", errors="ignore") as pf:
+                py_code = pf.read()
+
+        if "FastAPI" in py_code or "app = FastAPI" in py_code:
+            command = f'sh -c "pip install -r requirements.txt && python -m uvicorn {module_name}:app --host 0.0.0.0 --port 8000"'
+        elif "Flask" in py_code or "app = Flask" in py_code:
+            command = f'sh -c "pip install -r requirements.txt && python {main_py}"'
+        else:
+            command = f'sh -c "pip install -r requirements.txt && python {main_py}"'
     else:
         py_files = [f for f in files if f.endswith('.py')]
         if py_files:
@@ -1052,15 +1092,26 @@ def run_in_sandbox(project_name: str):
                 raise HTTPException(status_code=400, detail="Could not determine how to run this project. No Python or JS files found.")
 
     try:
+        # Clean up any previous container for this project
+        try:
+            for c in client.containers.list(all=True):
+                if f"coreforge_{project_name}" in c.name:
+                    c.stop(timeout=1)
+                    c.remove(force=True)
+        except Exception:
+            pass
+
+        ports_config = {"8000/tcp": 8080, "5000/tcp": 5000, "3000/tcp": 3001}
         container = client.containers.run(
             image,
             command,
+            name=f"coreforge_{project_name}",
             volumes={os.path.abspath(project_dir): {'bind': '/app', 'mode': 'rw'}},
             working_dir='/app',
             detach=True,
             stdout=True,
             stderr=True,
-            network_mode="host",
+            ports=ports_config,
         )
         # Wait up to 6 seconds for short-lived scripts to finish or servers to initialize
         start_wait = time.time()
